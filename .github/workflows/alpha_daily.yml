@@ -1,0 +1,38 @@
+name: Alpha Daily Market Scan
+
+on:
+  schedule:
+    # 매일 한국 시간 오전 9시 (UTC 00:00)에 실행
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 수동 실행 버튼 활성화
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Mission 1 (Scanner)
+        run: python .agent/tools/alpha_scanner.py
+
+      - name: Run Mission 2 (Sentiment)
+        run: python .agent/tools/alpha_sentiment.py
+
+      - name: Commit & Push Reports
+        run: |
+          git config --global user.name "AI-Agent-Alpha"
+          git config --global user.email "alpha@agent.ai"
+          git add output_reports/*.csv
+          git commit -m "📈 Daily Report: $(date +'%Y-%m-%d')" || exit 0
+          git push

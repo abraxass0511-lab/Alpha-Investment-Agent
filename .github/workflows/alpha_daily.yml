@@ -29,6 +29,12 @@ jobs:
       - name: Run Mission 2 (Sentiment)
         run: python .agent/tools/alpha_sentiment.py
 
+      - name: Run Mission 2 (Reporting to Telegram)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python .agent/tools/alpha_messenger.py
+
       - name: Commit & Push Reports
         run: |
           git config --global user.name "AI-Agent-Alpha"

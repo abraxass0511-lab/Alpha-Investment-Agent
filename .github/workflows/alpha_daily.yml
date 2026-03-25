@@ -9,6 +9,8 @@ on:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # 리포트 파일을 저장하기 위해 쓰기 권한이 필요합니다.
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3

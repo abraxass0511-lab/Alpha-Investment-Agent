@@ -33,23 +33,20 @@ def send_telegram_message(message):
 
 def report_daily_picks():
     today = datetime.now().strftime("%Y%m%d")
-    report_file = f"output_reports/daily_scan_{today}.csv"
+    report_file = f"output_reports/final_picks_{today}.csv"
     
-    if not os.path.exists(report_file):
-        report_file = "output_reports/daily_scan_latest.csv"
-        
     if os.path.exists(report_file):
         df = pd.read_csv(report_file)
-        if len(df) > 0:
-            msg = "🔔 *[대표님! 오늘의 알파 매수 보고서]* 🔔\n\n"
+        if not df.empty:
+            msg = "🔔 *[대표님! 오늘의 알파 최종 매수 보고서]* 🔔\n\n"
             msg += f"📅 일자: {datetime.now().strftime('%Y-%m-%d')}\n"
             msg += "--------------------------------------\n"
             
             for index, row in df.iterrows():
-                msg += f"🚀 *{row['Ticker']}* (ROE: {row['ROE']}%)\n"
-                msg += f"   - 시총: ${row['MarketCap_Billions']}B\n"
-                msg += f"   - 모멘텀: {'✅ 통과' if row['Above_50MA'] else '❌ 대기'}\n"
-                msg += f"   - AI 심리: {row['Sentiment_Score']} (초호재!)\n\n"
+                msg += f"🚀 *{row['Symbol']}* - {row['Name']}\n"
+                msg += f"   - 현재가: ${row['Current Price']}\n"
+                msg += f"   - 모멘텀: +{row['Momentum (%)']}% (이평선 대비)\n"
+                msg += f"   - AI 심리: {row['Sentiment']} (초호재!)\n\n"
             
             msg += "--------------------------------------\n"
             msg += "💬 *대표님, 이 종목들을 지금 바로 매수할까요?*\n"
@@ -57,7 +54,8 @@ def report_daily_picks():
         else:
             msg = "😴 *[오늘의 알파 보고]* \n\n오늘은 '체급+내실+에너지' 조건을 모두 만족하는 종목이 없습니다. 안전하게 현금을 보유하십시오! 🛡️"
     else:
-        msg = "❌ 에러: 오늘자 리포트 파일을 찾을 수 없습니다."
+        # 만약 최종 픽 파일이 없다면, 시장 상황이 안 좋아서 컷된 경우임
+        msg = "😴 *[오늘의 알파 보고]* \n\n현재 50일 이동평균선 아래에 있는 종목이 대다수입니다. 안전하게 현금을 보유하십시오! 🛡️"
 
     send_telegram_message(msg)
 

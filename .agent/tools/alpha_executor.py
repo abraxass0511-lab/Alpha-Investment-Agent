@@ -251,53 +251,162 @@ def report_execution(results):
     print(f"\n📨 매수 결과 보고 완료 (성공: {success_count}/{len(results)})")
 
 
+def execute_sell_orders(sell_targets):
+    """리밸런싱 매도 주문을 실행합니다."""
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from alpha_trader import AlphaTrader
+
+    trader = AlphaTrader()
+    results = []
+
+    for t in sell_targets:
+        symbol = t["symbol"]
+        qty = t["qty"]
+        current = t.get("current", 0)
+
+        # 시장가에 가깝게 지정가 매도
+        sell_price = round(current * 0.995, 2) if current > 0 else 0
+        print(f"  🔻 {symbol}: {qty}주 매도 @ ${sell_price}")
+
+        success = trader.sell_order(
+            symbol=symbol,
+            quantity=qty,
+            price=sell_price,
+            exchange="NASD"
+        )
+
+        results.append({
+            "symbol": symbol,
+            "action": "SELL",
+            "status": "✅ 매도완료" if success else "❌ 매도실패",
+            "qty": qty,
+            "price": sell_price,
+            "reasons": t.get("reasons", []),
+            "pnl_rate": t.get("pnl_rate", 0),
+        })
+
+        time.sleep(0.5)
+
+    return results
+
+
+def load_rebalance_recommendations():
+    """리밸런싱 추천 데이터를 로드합니다."""
+    rebal_path = "output_reports/rebalance_recommendations.json"
+    if not os.path.exists(rebal_path):
+        return None
+    try:
+        with open(rebal_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return None
+
+
+def report_full_execution(sell_results, buy_results):
+    """매도+매수 통합 결과를 텔레그램으로 보고합니다."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    msg = f"⚔️ *[알파 리밸런싱 집행 보고]*\n📅 {now}\n\n"
+
+    # 매도 결과
+    if sell_results:
+        msg += f"*🔻 매도 {len(sell_results)}건*\n"
+        for r in sell_results:
+            pnl = r.get("pnl_rate", 0)
+            pnl_emoji = "🟢" if pnl >= 0 else "🔴"
+            reason = " / ".join(r.get("reasons", []))
+            msg += f"  {pnl_emoji} *{r['symbol']}* {r['qty']}주 × ${r['price']:.2f} — {r['status']}\n"
+            msg += f"     사유: _{reason}_\n\n"
+
+    # 매수 결과
+    if buy_results:
+        msg += f"*🟢 매수 {len(buy_results)}건*\n"
+        for r in buy_results:
+            msg += f"  📈 *{r.get('symbol', '?')}* {r['qty']}주 × ${r['price']:.2f} — {r['status']}\n\n"
+
+    msg += f"─────────────────\n"
+    msg += f"🛡️ _알파가 대표님의 포트폴리오를 관리하고 있습니다._"
+
+    send_telegram(msg)
+    print(f"📨 리밸런싱 집행 보고 완료!")
+
+
 # ═══════════════════════════════════════════════════════
-# 메인: 종목 확인 → 승인 확인 → 매수 집행 → 결과 보고
+# 메인: 종목 확인 → 승인 확인 → 매도/매수 집행 → 결과 보고
 # ═══════════════════════════════════════════════════════
 if __name__ == "__main__":
     print("=" * 55)
     print("⚔️  에이전트 알파 — 집행 모드")
     print("=" * 55)
 
-    # ── 1단계: 먼저 매수 대상 종목이 있는지 확인 ──
-    print("\n📋 [1] 매수 대상 종목 확인...")
-    targets = load_buy_targets()
+    # ── 1단계: 리밸런싱 추천 & 매수 대상 확인 ──
+    print("\n📋 [1] 리밸런싱 추천 및 매수 대상 확인...")
 
-    if not targets:
-        # 매수 대상이 없으면 대표님을 방해하지 않고 조용히 종료
-        print("\n🛡️ 매수 대상 없음. 승인 요청 없이 조용히 종료합니다.")
-        print("   (대표님께 불필요한 알림을 보내지 않습니다)")
+    rebal = load_rebalance_recommendations()
+    sell_targets = rebal.get("sell", []) if rebal else []
+    buy_from_rebal = rebal.get("buy", []) if rebal else []
+
+    # final_picks에서 매수 대상 로드
+    buy_targets = load_buy_targets()
+
+    has_sells = len(sell_targets) > 0
+    has_buys = len(buy_targets) > 0 or len(buy_from_rebal) > 0
+
+    if not has_sells and not has_buys:
+        print("\n🛡️ 매도/매수 대상 없음. 조용히 종료합니다.")
         exit(0)
 
-    # ── 2단계: 매수 대상이 있을 때만 승인 확인 ──
-    print(f"\n📡 [2] 매수 대상 {len(targets)}종목 확인 — 대표님 응답 확인 중...")
+    # 액션 요약
+    actions = []
+    if has_sells:
+        sell_syms = ", ".join(s["symbol"] for s in sell_targets)
+        actions.append(f"매도 {len(sell_targets)}종목({sell_syms})")
+        print(f"  🔻 매도 추천: {sell_syms}")
+    if has_buys:
+        buy_syms = ", ".join(t["symbol"] for t in buy_targets) if buy_targets else ", ".join(b["symbol"] for b in buy_from_rebal)
+        actions.append(f"매수 {max(len(buy_targets), len(buy_from_rebal))}종목({buy_syms})")
+        print(f"  🟢 매수 추천: {buy_syms}")
+
+    # ── 2단계: 승인 확인 ──
+    print(f"\n📡 [2] 대표님 응답 확인 중...")
     status = check_approval()
 
     if status == "rejected":
-        # 대표님이 "반려" → 조용히 종료, 알림 없음
         print("\n🛑 대표님이 반려하셨습니다. 조용히 종료합니다.")
         exit(0)
 
     if status == "pending":
-        # 아직 응답 없음 → 리마인더 전송
         print("\n⏳ 아직 응답이 없습니다. 리마인더를 전송합니다.")
-        stock_list = ", ".join(t["symbol"] for t in targets)
+        action_str = " + ".join(actions)
         send_telegram(
             f"⏳ *[알파 승인 대기]*\n"
-            f"매수 대상: *{stock_list}*\n\n"
-            f"• \"승인\" → 자동 매수 시작\n"
-            f"• \"반려\" → 매수 취소"
+            f"변경 내용: *{action_str}*\n\n"
+            f"• \"승인\" → 자동 집행\n"
+            f"• \"반려\" → 현재 포트폴리오 유지"
         )
         exit(0)
 
-    # ── 3단계: "승인" 확인 → 매수 집행 ──
-    print(f"\n⚔️ [3] 대표님 승인 확인! {len(targets)}개 종목 매수 집행 시작...")
-    send_telegram(f"⚔️ *[알파 집행 시작]*\n대표님 승인 확인 — {len(targets)}개 종목 매수를 시작합니다.")
-    results = execute_buy_orders(targets)
+    # ── 3단계: 승인 확인 → 매도 먼저 실행 → 매수 실행 ──
+    print(f"\n⚔️ [3] 대표님 승인 확인! 집행을 시작합니다...")
+    send_telegram(f"⚔️ *[알파 집행 시작]*\n대표님 승인 확인!")
 
-    # ── 4단계: 결과 보고 ──
-    print("\n📨 [4] 매수 결과 보고...")
-    report_execution(results)
+    sell_results = []
+    buy_results = []
+
+    # 매도 먼저 (현금 확보)
+    if has_sells:
+        print(f"\n  🔻 매도 {len(sell_targets)}종목 실행...")
+        sell_results = execute_sell_orders(sell_targets)
+
+    # 매수
+    if has_buys and buy_targets:
+        print(f"\n  🟢 매수 {len(buy_targets)}종목 실행...")
+        buy_results_raw = execute_buy_orders(buy_targets)
+        buy_results = buy_results_raw
+
+    # ── 4단계: 통합 결과 보고 ──
+    print("\n📨 [4] 집행 결과 보고...")
+    report_full_execution(sell_results, buy_results)
 
     print("\n" + "=" * 55)
     print("🏁 집행 완료!")

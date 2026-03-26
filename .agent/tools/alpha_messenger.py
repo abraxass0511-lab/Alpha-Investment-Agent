@@ -151,7 +151,62 @@ def report_daily_picks():
     else:
         analysis_section += "❌ *조건 부합 종목 없음*\n\n"
 
-    if buy_stocks:
+    # ── 리밸런싱 추천 (보유종목 재검증 결과) ──
+    rebalance_section = ""
+    has_rebalance = False
+    try:
+        rebal_path = "output_reports/rebalance_recommendations.json"
+        if os.path.exists(rebal_path):
+            with open(rebal_path, "r", encoding="utf-8") as f:
+                rebal = json.load(f)
+
+            sell_recs = rebal.get("sell", [])
+            buy_recs = rebal.get("buy", [])
+
+            if sell_recs or buy_recs:
+                has_rebalance = True
+                rebalance_section = "\n*⚖️ 리밸런싱 추천 (승인 필요)*\n"
+                rebalance_section += "─────────────────\n"
+
+            # 매도 추천
+            if sell_recs:
+                rebalance_section += f"\n🔻 *매도 추천: {len(sell_recs)}종목*\n"
+                for s in sell_recs:
+                    sym = s["symbol"]
+                    pnl = s.get("pnl_rate", 0)
+                    pnl_emoji = "🟢" if pnl >= 0 else "🔴"
+                    reasons = " / ".join(s.get("reasons", []))
+                    rebalance_section += f"  {pnl_emoji} *{sym}* (수익률: {pnl:+.1f}%)\n"
+                    rebalance_section += f"     탈락 사유: _{reasons}_\n\n"
+
+            # 매수 추천
+            if buy_recs:
+                rebalance_section += f"🟢 *신규 매수 추천: {len(buy_recs)}종목*\n"
+                for b in buy_recs:
+                    sym = b["symbol"]
+                    name = b.get("name", sym)
+                    reason = b.get("reason", "기준 통과")
+                    rebalance_section += f"  📈 *{name} ({sym})*\n"
+                    rebalance_section += f"     근거: _{reason}_\n\n"
+
+    except Exception as e:
+        print(f"⚠️ 리밸런싱 데이터 로드 에러: {e}")
+
+    # ── 최종 결과 + 승인 요청 ──
+    if has_rebalance:
+        sell_count = len(rebal.get("sell", []))
+        buy_count = len(rebal.get("buy", []))
+        actions = []
+        if sell_count > 0:
+            actions.append(f"매도 {sell_count}종목")
+        if buy_count > 0:
+            actions.append(f"매수 {buy_count}종목")
+        action_str = " + ".join(actions)
+
+        final_result = f"*🎯 최종 결과: {action_str} 변경 추천*\n"
+        final_result += " • \"승인\" → 매도/매수 자동 집행\n"
+        final_result += " • \"반려\" → 현재 포트폴리오 유지\n\n"
+    elif buy_stocks:
         final_result = f"*🎯 최종 결과*\n • 선정된 {len(buy_stocks)}개 종목에 대해 자산의 *5%* 분산 매수 추천.\n"
         final_result += " • \"승인\" → 자동 매수 / \"반려\" → 매수 취소\n\n"
     else:
@@ -159,7 +214,7 @@ def report_daily_picks():
 
     footer = "📝 *비고 : 야후, FMP에서 모든 정보 받음*"
 
-    message = title + target_info + portfolio_section + summary_table + analysis_section + final_result + footer
+    message = title + target_info + portfolio_section + summary_table + analysis_section + rebalance_section + final_result + footer
     
     # 3. 로컬 파일 저장 (메모장 대용)
     if not os.path.exists("output_reports"): os.makedirs("output_reports")

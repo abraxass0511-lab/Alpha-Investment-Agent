@@ -40,5 +40,8 @@ jobs:
     - name: Run Alpha Sentiment
       run: python .agent/tools/alpha_sentiment.py
 
+    - name: Run Alpha Rebalancer
+      run: python .agent/tools/alpha_rebalancer.py
+
     - name: Run Alpha Messenger
       run: python .agent/tools/alpha_messenger.py

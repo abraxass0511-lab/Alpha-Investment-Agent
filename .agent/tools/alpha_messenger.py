@@ -165,8 +165,8 @@ def report_daily_picks():
                 reason = row.get('Reason', '분석 중')
                 buy_stocks.append(symbol)
                 picks_content += f"*{len(buy_stocks)}. {name} ({symbol})* 🔥 [BUY]\n"
-                picks_content += f"   • `모델`: Flash ⚡ / Pro 🧠\n"
-                picks_content += f"   • `핵심근거`: {reason} - Pro 🧠\n\n"
+                picks_content += f"   • `분석`: Finnhub 센티먼트 + FMP 펀더멘털\n"
+                picks_content += f"   • `핵심근거`: {reason}\n\n"
             analysis_section += picks_content
     else:
         analysis_section += "❌ *조건 부합 종목 없음*\n\n"

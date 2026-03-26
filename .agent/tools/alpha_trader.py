@@ -60,7 +60,7 @@ class AlphaTrader:
             "Authorization": f"Bearer {token}",
             "appkey": self.app_key,
             "appsecret": self.secret_key,
-            "tr_id": "VTTC8434R" # 모의투자용 해외주식 잔고조회 코드
+            "tr_id": "VTTS3012R" # 모의투자용 해외주식 잔고조회 코드 (공식 예제 기준)
         }
         
         # 계좌번호가 10자리라면 앞 8자리와 뒤 2자리를 나눕니다.

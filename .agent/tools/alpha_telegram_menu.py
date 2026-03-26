@@ -117,7 +117,7 @@ def handle_total_return():
         trader = get_trader()
         result = trader.get_balance()
         if not result:
-            return "⚠️ 잔고 조회에 실패했습니다, 대표님."
+            return "⚠️ 잔고 조회에 실패했습니다.\nKIS 모의투자 서버가 점검 중이거나 미국 장 외 시간일 수 있습니다."
 
         holdings, _ = result
         if not holdings:
@@ -199,7 +199,7 @@ def handle_deposit():
         buying = trader.get_buying_power(symbol="AAPL", price="0")
 
         if not buying:
-            return "⚠️ 예수금 조회에 실패했습니다."
+            return "⚠️ 예수금 조회에 실패했습니다.\nKIS 모의투자 서버 점검 또는 장 외 시간일 수 있습니다."
 
         usd_amt = buying.get("ord_psbl_frcr_amt", "0")
 
@@ -238,7 +238,7 @@ def handle_balance():
         trader = get_trader()
         result = trader.get_balance()
         if not result:
-            return "⚠️ 잔고 조회에 실패했습니다."
+            return "⚠️ 잔고 조회에 실패했습니다.\nKIS 모의투자 서버 점검 또는 장 외 시간일 수 있습니다."
 
         holdings, _ = result
         if not holdings:

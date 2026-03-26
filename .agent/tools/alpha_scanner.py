@@ -75,22 +75,44 @@ def process_item(symbol):
 
 def check_growth_step_3_5(symbol):
     """
-    Phase 4: Growth Verification
-    기본: FMP API / 백업: Yahoo Finance
+    Phase 4: Growth Verification (FMP 전용 - Yahoo 백업 없음)
+    FMP API만 사용. 429 에러 시 대기 후 재시도 (최대 5회).
     1. Earnings Surprise >= 10%
     2. EPS Growth (YoY) >= 20%
     OR 조건: 둘 중 하나만 만족하면 통과
     """
-    # === 1차 시도: FMP API (기본) ===
-    if FMP_KEY:
+    if not FMP_KEY:
+        print(f"    🚨 FMP API Key 없음! 4단계 검증 불가.")
+        return False, "FMP API Key Missing"
+    
+    max_retries = 5
+    
+    for attempt in range(max_retries):
         try:
+            # --- Call 1: Earnings Surprise ---
             url_surprise = f"https://financialmodelingprep.com/api/v3/earnings-surprises/{symbol}?apikey={FMP_KEY}"
-            s_res = requests.get(url_surprise, timeout=10)
+            s_res = requests.get(url_surprise, timeout=15)
             
+            if s_res.status_code == 429:
+                wait_time = 60 * (attempt + 1)
+                print(f"    ⏳ FMP 429 (시도 {attempt+1}/{max_retries}) → {wait_time}초 대기 후 재시도...")
+                time.sleep(wait_time)
+                continue
+            
+            # 두 API 호출 사이 13초 대기 (Rate Limit 준수)
+            time.sleep(13)
+            
+            # --- Call 2: Financial Growth ---
             url_growth = f"https://financialmodelingprep.com/api/v3/financial-growth/{symbol}?period=quarter&limit=1&apikey={FMP_KEY}"
-            g_res = requests.get(url_growth, timeout=10)
+            g_res = requests.get(url_growth, timeout=15)
             
-            # FMP 정상 응답(200)인 경우에만 사용
+            if g_res.status_code == 429:
+                wait_time = 60 * (attempt + 1)
+                print(f"    ⏳ FMP 429 (시도 {attempt+1}/{max_retries}) → {wait_time}초 대기 후 재시도...")
+                time.sleep(wait_time)
+                continue
+            
+            # 두 응답 모두 200인 경우 판정
             if s_res.status_code == 200 and g_res.status_code == 200:
                 s_data = s_res.json()
                 g_data = g_res.json()
@@ -102,32 +124,21 @@ def check_growth_step_3_5(symbol):
                     if last_surprise >= 10 or last_eps_growth >= 0.20:
                         return True, f"FMP Pass (Surprise: {round(last_surprise,1)}%, Growth: {round(last_eps_growth*100,1)}%)"
                     return False, f"FMP Fail (Surprise: {round(last_surprise,1)}%, Growth: {round(last_eps_growth*100,1)}%)"
+                
+                # 데이터가 비어있는 경우
+                return False, f"FMP No Data ({symbol})"
             
-            # 429 등 에러 → Yahoo 백업으로 전환
-            print(f"    ⚠️ FMP {s_res.status_code}/{g_res.status_code} → Yahoo 백업 전환")
+            # 기타 HTTP 에러 (5xx 등)
+            print(f"    ⚠️ FMP HTTP {s_res.status_code}/{g_res.status_code} → 30초 대기 후 재시도...")
+            time.sleep(30)
+            
         except Exception as e:
-            print(f"    ⚠️ FMP 에러({e}) → Yahoo 백업 전환")
+            print(f"    ⚠️ FMP 에러({e}) → 30초 대기 후 재시도...")
+            time.sleep(30)
     
-    # === 2차 시도: Yahoo Finance (백업) ===
-    try:
-        t = yf.Ticker(symbol)
-        info = t.info
-        
-        # Yahoo의 earningsQuarterlyGrowth (YoY EPS 성장률, 소수점)
-        eps_growth_y = info.get('earningsQuarterlyGrowth', 0) or 0
-        
-        # Yahoo에는 직접적인 surprise가 없으므로 EPS Growth만 판단
-        if eps_growth_y >= 0.20:
-            return True, f"Yahoo Pass (EPS Growth: {round(eps_growth_y*100,1)}%)"
-        
-        # earningsQuarterlyGrowth가 없으면 revenueGrowth로 보조 판단
-        rev_growth = info.get('revenueGrowth', 0) or 0
-        if rev_growth >= 0.20:
-            return True, f"Yahoo Pass (Revenue Growth: {round(rev_growth*100,1)}%)"
-        
-        return False, f"Yahoo Fail (EPS Growth: {round(eps_growth_y*100,1)}%, Rev Growth: {round(rev_growth*100,1)}%)"
-    except Exception as e:
-        return False, f"All Sources Failed ({str(e)})"
+    # 최대 재시도 초과
+    print(f"    🚨 {symbol}: FMP {max_retries}회 재시도 실패. SKIP.")
+    return False, f"FMP Failed after {max_retries} retries"
 
 def run_persistent_scan():
     tickers = get_sp500_tickers()
@@ -187,7 +198,7 @@ def run_persistent_scan():
     
     print(f"📊 1~3단계 완료: {c1}/{c2}/{c3}")
     
-    # Phase 4: Growth (FMP 기본 → Yahoo 백업, 13초 간격)
+    # Phase 4: Growth (FMP 전용 - Yahoo 백업 없음, 429 시 재시도)
     for idx, (symbol, data) in enumerate(step3_passed):
         print(f"🔍 [4단계] {symbol} 성장성 검증 중... ({idx+1}/{len(step3_passed)})")
         passed_4, reason_4 = check_growth_step_3_5(symbol)
@@ -195,7 +206,7 @@ def run_persistent_scan():
             c4 += 1
             data['GrowthReason'] = reason_4
             final_picks.append(data)
-        time.sleep(13)  # FMP 무료 플랜: 분당 5회 제한 준수
+        time.sleep(15)  # FMP 분당 5회 제한 준수 (2콜/종목 + 내부13초 + 외부15초)
 
     # 결과 저장
     if not os.path.exists('output_reports'): os.makedirs('output_reports')

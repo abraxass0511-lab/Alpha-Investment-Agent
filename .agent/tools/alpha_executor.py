@@ -247,36 +247,45 @@ def report_execution(results):
 
 
 # ═══════════════════════════════════════════════════════
-# 메인: 승인 확인 → 매수 집행 → 결과 보고
+# 메인: 종목 확인 → 승인 확인 → 매수 집행 → 결과 보고
 # ═══════════════════════════════════════════════════════
 if __name__ == "__main__":
     print("=" * 55)
     print("⚔️  에이전트 알파 — 집행 모드")
     print("=" * 55)
 
-    # 1단계: 텔레그램 승인 확인
-    print("\n📡 [1] 텔레그램에서 대표님 승인 확인 중...")
-    approved = check_approval()
-
-    if not approved:
-        print("\n🛡️ 승인 없음. 대기 모드를 유지합니다.")
-        send_telegram("⏳ *[알파 대기]*\n승인 메시지가 확인되지 않았습니다.\n\"승인\" 이라고 답장해 주시면 자동 매수를 시작합니다.")
-        exit(0)
-
-    # 2단계: 매수 대상 종목 로드
-    print("\n📋 [2] 매수 대상 종목 로드...")
+    # ── 1단계: 먼저 매수 대상 종목이 있는지 확인 ──
+    print("\n📋 [1] 매수 대상 종목 확인...")
     targets = load_buy_targets()
 
     if not targets:
-        send_telegram("🛡️ *[알파 보고]*\n매수 대상 종목이 없습니다.\n정밀 필터링 기준 미달 — *전액 현금 보유를 권고*드립니다.")
+        # 매수 대상이 없으면 대표님을 방해하지 않고 조용히 종료
+        print("\n🛡️ 매수 대상 없음. 승인 요청 없이 조용히 종료합니다.")
+        print("   (대표님께 불필요한 알림을 보내지 않습니다)")
         exit(0)
 
-    # 3단계: 매수 집행
-    print(f"\n⚔️ [3] {len(targets)}개 종목 매수 집행 시작...")
+    # ── 2단계: 매수 대상이 있을 때만 승인 확인 ──
+    print(f"\n📡 [2] 매수 대상 {len(targets)}종목 확인 — 대표님 승인 확인 중...")
+    approved = check_approval()
+
+    if not approved:
+        print("\n⏳ 아직 승인이 없습니다. 대기합니다.")
+        # 승인 요청은 alpha_messenger.py 리포트에서 이미 했으므로
+        # 여기서는 간결한 리마인더만 전송
+        stock_list = ", ".join(t["symbol"] for t in targets)
+        send_telegram(
+            f"⏳ *[알파 승인 대기]*\n"
+            f"매수 대상: *{stock_list}*\n"
+            f"\"승인\" 이라고 답장해 주시면 자동 매수를 시작합니다."
+        )
+        exit(0)
+
+    # ── 3단계: 승인 확인 → 매수 집행 ──
+    print(f"\n⚔️ [3] 대표님 승인 확인! {len(targets)}개 종목 매수 집행 시작...")
     send_telegram(f"⚔️ *[알파 집행 시작]*\n대표님 승인 확인 — {len(targets)}개 종목 매수를 시작합니다.")
     results = execute_buy_orders(targets)
 
-    # 4단계: 결과 보고
+    # ── 4단계: 결과 보고 ──
     print("\n📨 [4] 매수 결과 보고...")
     report_execution(results)
 

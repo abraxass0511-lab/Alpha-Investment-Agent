@@ -52,7 +52,7 @@ class AlphaTrader:
         if not token: return None
 
         # 해외주식 잔고 조회 주소 (모의/실전 동일)
-        url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
+        url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
         
         # 은행에 보낼 '나 이런 사람이야' 증명서
         headers = {
@@ -60,7 +60,7 @@ class AlphaTrader:
             "Authorization": f"Bearer {token}",
             "appkey": self.app_key,
             "appsecret": self.secret_key,
-            "tr_id": "VRPP7640R" # 모의투자용 잔고조회 코드
+            "tr_id": "VTTC8434R" # 모의투자용 해외주식 잔고조회 코드
         }
         
         # 계좌번호가 10자리라면 앞 8자리와 뒤 2자리를 나눕니다.
@@ -71,15 +71,18 @@ class AlphaTrader:
         params = {
             "CANO": acc_no_prefix,
             "ACNT_PRDT_CD": acc_no_suffix,
-            "WCRC_FRCR_DVSN_CD": "01", # 원화(01) 또는 외화(02)
-            "NATN_CD": "840" # 미국(840)
+            "OVRS_EXCG_CD": "NASD", # 나스닥(NASD), 뉴욕(NYSE), 아멕스(AMEX)
+            "TR_CRCY_CD": "USD", # 거래통화코드
+            "CTX_AREA_FK200": "",
+            "CTX_AREA_NK200": ""
         }
 
         try:
             res = requests.get(url, headers=headers, params=params)
             data = res.json()
             if data.get('rt_cd') == '0':
-                return data['output1']
+                print(f"✅ 잔고 조회 성공!")
+                return data.get('output1', []), data.get('output2', {})
             else:
                 print(f"❌ 잔고 조회 실패: {data.get('msg1')}")
                 return None
@@ -132,9 +135,19 @@ if __name__ == "__main__":
     # 간단한 연결 테스트
     trader = AlphaTrader()
     print("🏦 KIS 연결 테스트 시작...")
-    balance = trader.get_balance()
-    if balance:
+    result = trader.get_balance()
+    if result:
+        holdings, summary = result
         print(f"💰 내 계좌 잔고 확인 성공!")
-        print(f"💵 예수금(달러): ${balance[0].get('frcr_dn_sum_amt', '0')}")
+        if holdings:
+            for h in holdings:
+                sym = h.get('ovrs_pdno', '?')
+                qty = h.get('ovrs_cblc_qty', '0')
+                pnl = h.get('frcr_evlu_pfls_amt', '0')
+                print(f"  📈 {sym}: {qty}주 (손익: ${pnl})")
+        else:
+            print("  📭 보유 종목 없음 (빈 계좌)")
+        tot = summary.get('tot_evlu_pfls_amt', '0')
+        print(f"💵 총 평가손익: ${tot}")
     else:
         print("❌ 연결 실패. App Key와 Secret Key를 다시 확인해 주세요.")

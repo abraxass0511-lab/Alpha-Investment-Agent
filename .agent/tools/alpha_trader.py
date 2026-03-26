@@ -253,6 +253,91 @@ class AlphaTrader:
             print(f"🚨 매도 에러: {e}")
             return False
 
+    # ───────────────────────────────────────────────────────────
+    # 7. 주문 체결내역 조회 [v1_해외주식-007]
+    #    → 오늘 주문한 내역의 체결/미체결 확인
+    # ───────────────────────────────────────────────────────────
+    def get_order_status(self):
+        """오늘의 주문 체결내역을 조회합니다."""
+        token = self.get_access_token()
+        if not token:
+            return None
+
+        url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-ccnl"
+
+        # 공식 tr_id: 모의투자 VTTS3035R / 실전 TTTS3035R
+        headers = self._make_headers("VTTS3035R")
+        today = datetime.now().strftime("%Y%m%d")
+
+        params = {
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
+            "PDNO": "",              # 전체 종목 (모의투자는 ""만 가능)
+            "ORD_STRT_DT": today,
+            "ORD_END_DT": today,
+            "SLL_BUY_DVSN": "00",    # 전체 (모의투자는 "00"만 가능)
+            "CCLD_NCCS_DVSN": "00",  # 전체 (모의투자는 "00"만 가능)
+            "OVRS_EXCG_CD": "",      # 전체 (모의투자는 ""만 가능)
+            "SORT_SQN": "DS",
+            "ORD_DT": "",
+            "ORD_GNO_BRNO": "",
+            "ODNO": "",
+            "CTX_AREA_NK200": "",
+            "CTX_AREA_FK200": "",
+        }
+
+        try:
+            res = requests.get(url, headers=headers, params=params)
+            data = res.json()
+            if data.get('rt_cd') == '0':
+                orders = data.get('output', [])
+                return orders
+            else:
+                print(f"❌ 체결내역 조회 실패: {data.get('msg1')}")
+                return None
+        except Exception as e:
+            print(f"🚨 체결내역 조회 에러: {e}")
+            return None
+
+    # ───────────────────────────────────────────────────────────
+    # 8. 해외주식 현재가 조회 [v1_해외주식-010]
+    #    → 가디언이 -10% 하락 판단시 사용
+    # ───────────────────────────────────────────────────────────
+    def get_current_price(self, symbol, exchange="NAS"):
+        """해외주식 현재가를 조회합니다."""
+        token = self.get_access_token()
+        if not token:
+            return None
+
+        url = f"{self.base_url}/uapi/overseas-price/v1/quotations/price"
+
+        # 공식 tr_id: 모의/실전 동일 HHDFS00000300
+        headers = self._make_headers("HHDFS00000300")
+        params = {
+            "AUTH": "",
+            "EXCD": exchange,    # NAS(나스닥), NYS(뉴욕), AMS(아멕스)
+            "SYMB": symbol,
+        }
+
+        try:
+            res = requests.get(url, headers=headers, params=params)
+            data = res.json()
+            if data.get('rt_cd') == '0':
+                output = data.get('output', {})
+                return {
+                    "price": float(output.get("last", "0")),      # 현재가
+                    "diff": output.get("diff", "0"),               # 전일대비
+                    "rate": output.get("rate", "0"),                # 등락률
+                    "high": output.get("high", "0"),               # 고가
+                    "low": output.get("low", "0"),                 # 저가
+                }
+            else:
+                print(f"❌ 현재가 조회 실패 ({symbol}): {data.get('msg1')}")
+                return None
+        except Exception as e:
+            print(f"🚨 현재가 조회 에러: {e}")
+            return None
+
 
 # ═══════════════════════════════════════════════════════════════
 # 메인: 종합 연결 테스트

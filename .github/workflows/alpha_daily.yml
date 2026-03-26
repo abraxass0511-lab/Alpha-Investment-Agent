@@ -34,8 +34,28 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run Alpha Scanner
-      run: python .agent/tools/alpha_scanner.py
+    - name: Run Alpha Scanner (100% 될 때까지 재시도)
+      run: |
+        MAX_RETRIES=5
+        RETRY=0
+        while [ $RETRY -lt $MAX_RETRIES ]; do
+          echo "🔄 스캔 시도 $((RETRY+1))/$MAX_RETRIES"
+          python .agent/tools/alpha_scanner.py
+          
+          # metadata.json에서 success_all 확인
+          SUCCESS=$(python -c "import json; m=json.load(open('output_reports/metadata.json')); print(m.get('success_all', False))")
+          
+          if [ "$SUCCESS" = "True" ]; then
+            echo "✅ 100% 수집 완료!"
+            break
+          fi
+          
+          RETRY=$((RETRY+1))
+          if [ $RETRY -lt $MAX_RETRIES ]; then
+            echo "⚠️ 누락 발생. 10분 후 재시도..."
+            sleep 600
+          fi
+        done
 
     - name: Run Alpha Sentiment
       run: python .agent/tools/alpha_sentiment.py

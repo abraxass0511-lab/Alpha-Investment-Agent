@@ -299,4 +299,13 @@ def run_persistent_scan():
 
 
 if __name__ == "__main__":
+    # 미국 장 개장일 체크
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from us_market_calendar import is_trading_day
+
+    if not is_trading_day():
+        print("📅 오늘은 미국 시장 휴장일입니다. 스캔을 건너뜁니다.")
+        sys.exit(0)
+
     run_persistent_scan()

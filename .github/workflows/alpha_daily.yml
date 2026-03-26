@@ -2,7 +2,7 @@ name: Alpha Daily Investment Report
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 매일 한국 시간 오전 9시 (00:00 UTC)
+    - cron: '0 0 * * 1-5' # 월~금 한국 시간 오전 9시 (00:00 UTC)
   workflow_dispatch: # 수동 실행 가능
 
 jobs:

@@ -214,6 +214,15 @@ def report_daily_picks():
 
     footer = "📝 *비고 : 야후, FMP에서 모든 정보 받음*"
 
+    # 휴장 안내 (금요일 → 주말 안내, 공휴일 전날 → 공휴일 안내)
+    try:
+        from us_market_calendar import generate_closure_notice
+        closure_notice = generate_closure_notice()
+        if closure_notice:
+            footer += closure_notice
+    except Exception as e:
+        print(f"⚠️ 휴장 안내 생성 에러: {e}")
+
     message = title + target_info + portfolio_section + summary_table + analysis_section + rebalance_section + final_result + footer
     
     # 3. 로컬 파일 저장 (메모장 대용)
@@ -227,4 +236,10 @@ def report_daily_picks():
     print(f"✅ 리포트 전송 및 로컬 저장 완료! (report_{date_str}.md)")
 
 if __name__ == "__main__":
+    # 미국 장 개장일 체크
+    from us_market_calendar import is_trading_day
+    if not is_trading_day():
+        print("📅 오늘은 미국 시장 휴장일입니다. 리포트를 건너뜁니다.")
+        exit(0)
+
     report_daily_picks()

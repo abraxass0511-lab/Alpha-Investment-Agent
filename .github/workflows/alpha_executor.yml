@@ -1,0 +1,38 @@
+name: Alpha Executor - Approval Check & Auto Buy
+
+on:
+  # 매일 아침 리포트 전송 30분 후 승인 확인 (한국 시간 09:30)
+  schedule:
+    - cron: '30 0 * * *'
+  # 수동 실행 가능 (테스트용)
+  workflow_dispatch:
+
+jobs:
+  check-and-execute:
+    runs-on: ubuntu-latest
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+      KIS_SECRET_KEY: ${{ secrets.KIS_SECRET_KEY }}
+      KIS_CANO: ${{ secrets.KIS_CANO }}
+      KIS_ACNT_PRDT_CD: ${{ secrets.KIS_ACNT_PRDT_CD }}
+      KIS_BASE_URL: ${{ secrets.KIS_BASE_URL }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Check Approval & Execute Buy Orders
+      run: python .agent/tools/alpha_executor.py

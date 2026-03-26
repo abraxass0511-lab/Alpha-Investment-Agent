@@ -7,15 +7,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ═══════════════════════════════════════════════════════════════
-# KIS 거래소 코드 매핑 (종목 → 거래소)
-# ═══════════════════════════════════════════════════════════════
-EXCHANGE_MAP = {
-    "NASD": "NASD",  # 나스닥
-    "NYSE": "NYSE",  # 뉴욕
-    "AMEX": "AMEX",  # 아멕스
-}
-
 class AlphaTrader:
     """에이전트 알파의 칼날 — KIS 모의투자 해외주식 자동매매 모듈 (공식 API 규격 준수)"""
 
@@ -23,8 +14,9 @@ class AlphaTrader:
         # 깃허브 시크릿(금고)에서 정보 가져오기
         self.app_key = os.getenv("KIS_APP_KEY")
         self.secret_key = os.getenv("KIS_SECRET_KEY")
-        self.account_no = os.getenv("KIS_ACCOUNT_NO")
-        self.base_url = os.getenv("KIS_BASE_URL")  # https://openapivts.koreainvestment.com:29443
+        self.cano = os.getenv("KIS_CANO")                  # 계좌번호 앞 8자리
+        self.acnt_prdt_cd = os.getenv("KIS_ACNT_PRDT_CD")  # 계좌상품코드 뒤 2자리
+        self.base_url = os.getenv("KIS_BASE_URL")           # https://openapivts.koreainvestment.com:29443
 
         self.access_token = None
         self.token_expiry = None
@@ -69,28 +61,62 @@ class AlphaTrader:
             "tr_id": tr_id
         }
 
-    def _account_parts(self):
-        """계좌번호를 앞8자리/뒤2자리로 분리합니다."""
-        return self.account_no[:8], self.account_no[-2:]
+    # ───────────────────────────────────────────────────────────
+    # 2. 예수금 조회 (체결기준 현재잔고) [v1_해외주식-008]
+    #    → 통화별 예수금 (USD, JPY, HKD 등) + 원화 합산
+    #    → 앱의 "예수금" 버튼과 동일
+    # ───────────────────────────────────────────────────────────
+    def get_deposit(self):
+        """통화별 예수금(총 매수가능금액)을 조회합니다."""
+        token = self.get_access_token()
+        if not token:
+            return None
+
+        url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
+
+        # 공식 tr_id: 모의투자 VTRP6504R / 실전 CTRP6504R
+        headers = self._make_headers("VTRP6504R")
+        params = {
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
+            "WCRC_FRCR_DVSN_CD": "01",  # 원화(01)
+            "NATN_CD": "840",            # 미국(840)
+            "TR_MKET_CD": "00",          # 전체시장
+            "INQR_DVSN_CD": "00"         # 전체조회
+        }
+
+        try:
+            res = requests.get(url, headers=headers, params=params)
+            data = res.json()
+            if data.get('rt_cd') == '0':
+                return {
+                    "output2": data.get('output2', []),  # 통화별 예수금 내역
+                    "output3": data.get('output3', {}),  # 합산 총계
+                }
+            else:
+                print(f"❌ 예수금 조회 실패: {data.get('msg1')}")
+                return None
+        except Exception as e:
+            print(f"🚨 예수금 조회 에러: {e}")
+            return None
 
     # ───────────────────────────────────────────────────────────
-    # 2. 매수가능금액 조회 [v1_해외주식-014]
-    #    → 앱의 "주문가능금액"과 동일한 값을 반환
+    # 3. 해외주식 매수가능금액 조회 [v1_해외주식-014]
+    #    → 특정 종목의 매수가능수량/금액
     # ───────────────────────────────────────────────────────────
     def get_buying_power(self, symbol="AAPL", price="0"):
-        """해외주식 매수가능금액을 조회합니다. (앱과 동일한 금액)"""
+        """해외주식 매수가능금액을 조회합니다."""
         token = self.get_access_token()
         if not token:
             return None
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-psamount"
-        acc_prefix, acc_suffix = self._account_parts()
 
         # 공식 tr_id: 모의투자 VTTS3007R / 실전 TTTS3007R
         headers = self._make_headers("VTTS3007R")
         params = {
-            "CANO": acc_prefix,
-            "ACNT_PRDT_CD": acc_suffix,
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": "NASD",
             "OVRS_ORD_UNPR": price,
             "ITEM_CD": symbol,
@@ -102,9 +128,8 @@ class AlphaTrader:
             if data.get('rt_cd') == '0':
                 output = data.get('output', {})
                 return {
-                    "ord_psbl_frcr_amt": output.get("ovrs_ord_psbl_amt", "0"),  # 외화주문가능금액
-                    "max_ord_psbl_qty": output.get("max_ord_psbl_qty", "0"),     # 최대주문가능수량
-                    "frcr_ord_psbl_amt1": output.get("frcr_ord_psbl_amt1", "0"), # 외화주문가능금액1
+                    "ord_psbl_frcr_amt": output.get("ovrs_ord_psbl_amt", "0"),
+                    "max_ord_psbl_qty": output.get("max_ord_psbl_qty", "0"),
                 }
             else:
                 print(f"❌ 매수가능금액 조회 실패: {data.get('msg1')}")
@@ -114,7 +139,7 @@ class AlphaTrader:
             return None
 
     # ───────────────────────────────────────────────────────────
-    # 3. 해외주식 잔고 조회 [v1_해외주식-006]
+    # 4. 해외주식 잔고 조회 [v1_해외주식-006]
     #    → 보유 종목 목록 + 평가손익
     # ───────────────────────────────────────────────────────────
     def get_balance(self):
@@ -124,13 +149,12 @@ class AlphaTrader:
             return None
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-        acc_prefix, acc_suffix = self._account_parts()
 
         # 공식 tr_id: 모의투자 VTTS3012R / 실전 TTTS3012R
         headers = self._make_headers("VTTS3012R")
         params = {
-            "CANO": acc_prefix,
-            "ACNT_PRDT_CD": acc_suffix,
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": "NASD",
             "TR_CRCY_CD": "USD",
             "CTX_AREA_FK200": "",
@@ -150,7 +174,7 @@ class AlphaTrader:
             return None
 
     # ───────────────────────────────────────────────────────────
-    # 4. 해외주식 매수 주문 [v1_해외주식-001]
+    # 5. 해외주식 매수 주문 [v1_해외주식-001]
     # ───────────────────────────────────────────────────────────
     def buy_order(self, symbol, quantity, price, exchange="NASD"):
         """해외주식 지정가 매수 주문을 실행합니다."""
@@ -159,21 +183,20 @@ class AlphaTrader:
             return False
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/order"
-        acc_prefix, acc_suffix = self._account_parts()
 
         # 공식 tr_id: 모의투자 미국 매수 VTTT1002U / 실전 TTTT1002U
         headers = self._make_headers("VTTT1002U")
         payload = {
-            "CANO": acc_prefix,
-            "ACNT_PRDT_CD": acc_suffix,
-            "OVRS_EXCG_CD": exchange,       # NASD, NYSE, AMEX
-            "PDNO": symbol,                  # 종목코드 (AAPL, MSFT 등)
-            "ORD_QTY": str(quantity),         # 주문수량
-            "OVRS_ORD_UNPR": str(price),      # 주문단가 (지정가)
-            "CTAC_TLNO": "",                  # 연락전화번호(선택)
-            "MGCO_APTM_ODNO": "",             # 운용사지정주문번호(선택)
-            "ORD_SVR_DVSN_CD": "0",           # 주문서버구분코드
-            "ORD_DVSN": "00"                  # 주문구분: 00=지정가 (모의투자는 지정가만 가능)
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
+            "OVRS_EXCG_CD": exchange,
+            "PDNO": symbol,
+            "ORD_QTY": str(quantity),
+            "OVRS_ORD_UNPR": str(price),
+            "CTAC_TLNO": "",
+            "MGCO_APTM_ODNO": "",
+            "ORD_SVR_DVSN_CD": "0",
+            "ORD_DVSN": "00"
         }
 
         try:
@@ -191,7 +214,7 @@ class AlphaTrader:
             return False
 
     # ───────────────────────────────────────────────────────────
-    # 5. 해외주식 매도 주문 [v1_해외주식-001]
+    # 6. 해외주식 매도 주문 [v1_해외주식-001]
     # ───────────────────────────────────────────────────────────
     def sell_order(self, symbol, quantity, price, exchange="NASD"):
         """해외주식 지정가 매도 주문을 실행합니다."""
@@ -200,13 +223,12 @@ class AlphaTrader:
             return False
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/order"
-        acc_prefix, acc_suffix = self._account_parts()
 
         # 공식 tr_id: 모의투자 미국 매도 VTTT1006U / 실전 TTTT1006U
         headers = self._make_headers("VTTT1006U")
         payload = {
-            "CANO": acc_prefix,
-            "ACNT_PRDT_CD": acc_suffix,
+            "CANO": self.cano,
+            "ACNT_PRDT_CD": self.acnt_prdt_cd,
             "OVRS_EXCG_CD": exchange,
             "PDNO": symbol,
             "ORD_QTY": str(quantity),
@@ -241,24 +263,57 @@ if __name__ == "__main__":
     print("🏦 KIS 모의투자 계좌 종합 점검")
     print("=" * 55)
 
-    # --- 매수가능금액 (앱과 동일 금액) ---
-    print("\n💵 [매수가능금액] (앱 '주문가능금액'과 동일)")
+    # ─── 1. 예수금 (통화별 총 매수가능금액) ───
+    print("\n💰 [예수금] (통화별 총 매수가능금액)")
+    print("-" * 45)
+    deposit = trader.get_deposit()
+    if deposit:
+        currencies = deposit.get("output2", [])
+        summary = deposit.get("output3", {})
+
+        if currencies:
+            total_krw = 0
+            for cur in currencies:
+                crcy = cur.get('crcy_cd', '?')
+                deposit_amt = cur.get('frcr_dncl_amt_2', '0')
+                evlu_amt_krw = cur.get('evlu_amt_smtl_amt', '0')
+                if float(deposit_amt) > 0:
+                    print(f"  🏷️ {crcy}: {deposit_amt} (원화환산: ₩{evlu_amt_krw})")
+                    try:
+                        total_krw += float(evlu_amt_krw)
+                    except:
+                        pass
+            if total_krw > 0:
+                print(f"  ────────────────────────────────")
+                print(f"  💎 총 예수금 (원화환산): ₩{total_krw:,.0f}")
+        else:
+            print("  📭 통화별 예수금 데이터 없음")
+
+        # output3 합산 정보
+        if summary:
+            tot_asst = summary.get('tot_asst_amt', 'N/A')
+            tot_evlu = summary.get('tot_evlu_pfls_amt', 'N/A')
+            print(f"\n  📊 총 자산평가액: ₩{tot_asst}")
+            print(f"  📊 총 평가손익: ₩{tot_evlu}")
+    else:
+        print("  ❌ 예수금 조회 실패")
+
+    # ─── 2. USD 매수가능금액 ───
+    print(f"\n💵 [USD 매수가능금액]")
     print("-" * 45)
     power = trader.get_buying_power(symbol="AAPL", price="252.62")
     if power:
-        amt = power['ord_psbl_frcr_amt']
-        qty = power['max_ord_psbl_qty']
-        print(f"  💰 주문가능금액: ${amt}")
-        print(f"  📊 AAPL 최대 매수가능수량: {qty}주")
+        print(f"  💰 USD 주문가능금액: ${power['ord_psbl_frcr_amt']}")
+        print(f"  📊 AAPL 최대 매수가능: {power['max_ord_psbl_qty']}주")
     else:
         print("  ❌ 매수가능금액 조회 실패")
 
-    # --- 보유 종목 ---
+    # ─── 3. 보유 종목 ───
     print(f"\n📊 [보유 종목]")
     print("-" * 45)
     result = trader.get_balance()
     if result:
-        holdings, summary = result
+        holdings, bal_summary = result
         if holdings:
             for h in holdings:
                 sym = h.get('ovrs_pdno', '?')
@@ -267,14 +322,9 @@ if __name__ == "__main__":
                 cur = h.get('now_pric2', '0')
                 pnl = h.get('frcr_evlu_pfls_amt', '0')
                 pnl_rate = h.get('evlu_pfls_rt', '0')
-                print(f"  📈 {sym}: {qty}주 | 매입가: ${buy_avg} | 현재가: ${cur} | 손익: ${pnl} ({pnl_rate}%)")
+                print(f"  📈 {sym}: {qty}주 | 매입: ${buy_avg} | 현재: ${cur} | 손익: ${pnl} ({pnl_rate}%)")
         else:
             print("  📭 보유 종목 없음")
-
-        tot_pnl = summary.get('tot_evlu_pfls_amt', '0') if summary else '0'
-        tot_buy = summary.get('frcr_pchs_amt1', '0') if summary else '0'
-        print(f"\n  📋 총 매입금액: ${tot_buy}")
-        print(f"  📋 총 평가손익: ${tot_pnl}")
 
     print("\n" + "=" * 55)
     print("🏁 점검 완료!")

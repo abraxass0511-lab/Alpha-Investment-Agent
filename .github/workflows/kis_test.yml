@@ -10,7 +10,8 @@ jobs:
     env:
       KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
       KIS_SECRET_KEY: ${{ secrets.KIS_SECRET_KEY }}
-      KIS_ACCOUNT_NO: ${{ secrets.KIS_ACCOUNT_NO }}
+      KIS_CANO: ${{ secrets.KIS_CANO }}
+      KIS_ACNT_PRDT_CD: ${{ secrets.KIS_ACNT_PRDT_CD }}
       KIS_BASE_URL: ${{ secrets.KIS_BASE_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

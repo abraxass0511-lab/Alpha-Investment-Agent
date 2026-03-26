@@ -357,27 +357,39 @@ TEXT_HANDLERS = {
 
 
 def process_updates():
-    """새 메시지를 확인하고 처리합니다."""
-    offset = load_offset()
-    updates = get_updates(offset)
+    """새 메시지를 확인하고 처리합니다. (최근 5분 이내 메시지만)"""
+    # offset 없이 최신 메시지 가져오기
+    updates = get_updates()
 
     if not updates:
         print("📭 새 메시지 없음.")
         return
 
+    # 현재 시간 기준 5분 이내 메시지만 처리
+    now = time.time()
+    cutoff = now - 300  # 5분 = 300초
+
+    processed = 0
     for update in updates:
         update_id = update["update_id"]
 
         # 텍스트 메시지 (리플라이 키보드 버튼 클릭 시)
         if "message" in update:
             msg = update["message"]
+            msg_time = msg.get("date", 0)
+
+            # 5분 이전 메시지는 건너뛰기 (중복 처리 방지)
+            if msg_time < cutoff:
+                continue
+
             text = msg.get("text", "").strip()
             from_id = str(msg.get("from", {}).get("id", ""))
 
             # 본인 확인
             if from_id != str(CHAT_ID):
-                save_offset(update_id + 1)
                 continue
+
+            processed += 1
 
             # 메뉴 / 시작
             if text.lower() in ["/menu", "/start", "메뉴"]:
@@ -400,7 +412,6 @@ def process_updates():
             # 승인/반려 (기존 로직과 연동)
             elif text in ["승인", "반려"]:
                 print(f"✅ 승인/반려 입력: {text}")
-                # 기존 alpha_executor에서 처리하므로 여기서는 패스
 
             # 그 외 모든 질문 → AI 대화 엔진
             else:
@@ -413,21 +424,17 @@ def process_updates():
                     print(f"⚠️ AI 에러: {e}")
                     send_message(f"⚠️ AI 답변 생성 에러: {e}", reply_markup=REPLY_KEYBOARD)
 
-        save_offset(update_id + 1)
+    # 마지막 update_id+1로 offset 설정 (처리한 메시지를 다음에 안 받음)
+    if updates:
+        last_id = updates[-1]["update_id"]
+        get_updates(offset=last_id + 1)  # offset 확인용 빈 호출
+
+    print(f"✅ 처리 완료: {processed}건 (전체 {len(updates)}건 중 최근 5분)")
 
 
 if __name__ == "__main__":
     print("=" * 50)
     print(f"🤖 알파 텔레그램 메뉴 봇 ({datetime.now().strftime('%H:%M')})")
     print("=" * 50)
-
-    # 최초 1회 메뉴 키보드 활성화 (플래그 파일로 중복 방지)
-    menu_flag = "output_reports/menu_activated.json"
-    if not os.path.exists(menu_flag):
-        print("📋 최초 실행 → 메뉴 키보드 활성화!")
-        send_menu()
-        os.makedirs(os.path.dirname(menu_flag), exist_ok=True)
-        with open(menu_flag, "w") as f:
-            json.dump({"activated": True, "time": datetime.now().isoformat()}, f)
-
     process_updates()
+

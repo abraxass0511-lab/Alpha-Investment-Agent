@@ -215,6 +215,10 @@ def ask_gemini(user_question):
             data = r.json()
             answer = data["candidates"][0]["content"]["parts"][0]["text"]
             return answer.strip()
+        elif r.status_code == 429:
+            return "⚠️ Gemini AI 무료 제공량을 초과했습니다.\n잠시 후 다시 시도해 주세요, 대표님."
+        elif r.status_code == 403:
+            return "⚠️ Gemini API 키가 유효하지 않거나 권한이 없습니다."
         else:
             return f"⚠️ AI 응답 에러 (HTTP {r.status_code})"
     except Exception as e:

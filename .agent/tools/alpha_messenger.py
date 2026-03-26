@@ -232,7 +232,13 @@ def report_daily_picks():
     else:
         final_result = "*🎯 최종 결과*\n*🛡️ 가디언 조치*: 정밀 필터링(0.7) 기준 미달. **전액 현금 보유 권고.**\n\n"
 
-    footer = "📝 *비고 : 야후, FMP에서 모든 정보 받음*"
+    # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
+    if meta.get("success_all", False):
+        footer = "📝 _비고 : 야후, FMP에서 모든 정보 받음_"
+    else:
+        total = meta.get("total", 503)
+        collected = meta.get("step1", 0) + (total - meta.get("step1", 0))  # 수집 시도 수
+        footer = f"📝 _비고 : ⚠️ 야후 데이터 일부 누락 발생 (수집 미완료)_"
 
     # 휴장 안내 (금요일 → 주말 안내, 공휴일 전날 → 공휴일 안내)
     try:

@@ -30,4 +30,4 @@ jobs:
         pip install -r requirements.txt
 
     - name: Test KIS Connection
-      run: python test_kis_balance.py
+      run: python .agent/tools/alpha_trader.py

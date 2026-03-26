@@ -402,8 +402,16 @@ def process_updates():
                 print(f"✅ 승인/반려 입력: {text}")
                 # 기존 alpha_executor에서 처리하므로 여기서는 패스
 
+            # 그 외 모든 질문 → AI 대화 엔진
             else:
-                print(f"❓ 알 수 없는 입력: {text}")
+                print(f"🧠 AI 질문: {text}")
+                try:
+                    from alpha_ai_chat import ask_gemini
+                    response = ask_gemini(text)
+                    send_message(response, reply_markup=REPLY_KEYBOARD)
+                except Exception as e:
+                    print(f"⚠️ AI 에러: {e}")
+                    send_message(f"⚠️ AI 답변 생성 에러: {e}", reply_markup=REPLY_KEYBOARD)
 
         save_offset(update_id + 1)
 

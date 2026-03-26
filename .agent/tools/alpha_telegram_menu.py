@@ -83,30 +83,23 @@ def save_offset(offset):
 
 
 # ═══════════════════════════════════════════════════════
-# 메뉴 키보드
+# 리플라이 키보드 (상시 하단 고정)
 # ═══════════════════════════════════════════════════════
-MENU_KEYBOARD = {
-    "inline_keyboard": [
-        [
-            {"text": "📊 전체 수익률", "callback_data": "total_return"},
-            {"text": "📈 종목별 수익률", "callback_data": "stock_return"},
-        ],
-        [
-            {"text": "💵 예수금 현황", "callback_data": "deposit"},
-            {"text": "💰 실시간 잔고", "callback_data": "balance"},
-        ],
-        [
-            {"text": "🔍 오늘자 스캔", "callback_data": "today_scan"},
-            {"text": "🛑 긴급 전량 매도", "callback_data": "emergency_sell"},
-        ],
-    ]
+REPLY_KEYBOARD = {
+    "keyboard": [
+        ["📊 전체 수익률", "📈 종목별 수익률"],
+        ["💵 예수금 현황", "💰 실시간 잔고"],
+        ["🔍 오늘자 스캔", "🛑 긴급 전량 매도"],
+    ],
+    "resize_keyboard": True,
+    "is_persistent": True,
 }
 
 
 def send_menu():
     send_message(
-        "🤖 *알파 에이전트 메뉴*\n\n무엇을 확인하시겠습니까, 대표님?",
-        reply_markup=MENU_KEYBOARD,
+        "🤖 *알파 에이전트 메뉴*\n\n하단 버튼을 눌러주세요, 대표님!",
+        reply_markup=REPLY_KEYBOARD,
     )
 
 
@@ -175,7 +168,8 @@ def handle_stock_return():
             return "📈 *종목별 수익률*\n\n📭 보유 종목이 없습니다, 대표님."
 
         msg = "📈 *종목별 수익률*\n\n"
-        for h in holdings:
+        active = [h for h in holdings if int(float(h.get('ovrs_cblc_qty', '0'))) > 0]
+        for h in active:
             sym = h.get('ovrs_pdno', '?')
             qty = int(float(h.get('ovrs_cblc_qty', '0')))
             buy_avg = float(h.get('pchs_avg_pric', '0'))
@@ -183,17 +177,14 @@ def handle_stock_return():
             pnl_rt = float(h.get('evlu_pfls_rt', '0'))
             pnl = float(h.get('frcr_evlu_pfls_amt', '0'))
 
-            if qty <= 0:
-                continue
-
             emoji = "🟢" if pnl >= 0 else "🔴"
             msg += f"{emoji} *{sym}* ({pnl_rt:+.1f}%)\n"
             msg += f"   {qty}주 | 매입 ${buy_avg:.2f} → 현재 ${cur:.2f}\n"
             msg += f"   손익: {pnl:+,.2f}\n\n"
 
-        best = max(holdings, key=lambda h: float(h.get('evlu_pfls_rt', '0')))
-        best_sym = best.get('ovrs_pdno', '?')
-        msg += f"🏆 효자 종목: *{best_sym}*"
+        if active:
+            best = max(active, key=lambda h: float(h.get('evlu_pfls_rt', '0')))
+            msg += f"🏆 효자 종목: *{best.get('ovrs_pdno', '?')}*"
 
         return msg
 
@@ -212,7 +203,6 @@ def handle_deposit():
 
         usd_amt = buying.get("ord_psbl_frcr_amt", "0")
 
-        # 총 자산 대비 현금 비중 계산
         result = trader.get_balance()
         cash_ratio = 100
         if result:
@@ -266,7 +256,6 @@ def handle_balance():
             cur = float(h.get('now_pric2', '0'))
             eval_amt = cur * qty
             total_eval += eval_amt
-
             msg += f"  • *{sym}*: {qty}주 × ${cur:.2f} = ${eval_amt:,.2f}\n"
 
         msg += f"\n📈 총 평가액: *${total_eval:,.2f}*"
@@ -355,20 +344,20 @@ def execute_emergency_sell():
 
 
 # ═══════════════════════════════════════════════════════
-# 메인: 메시지/콜백 처리
+# 텍스트 메시지 → 핸들러 매핑 (리플라이 키보드용)
 # ═══════════════════════════════════════════════════════
-CALLBACK_HANDLERS = {
-    "total_return": handle_total_return,
-    "stock_return": handle_stock_return,
-    "deposit": handle_deposit,
-    "balance": handle_balance,
-    "today_scan": handle_today_scan,
-    "emergency_sell": handle_emergency_sell,
+TEXT_HANDLERS = {
+    "📊 전체 수익률": handle_total_return,
+    "📈 종목별 수익률": handle_stock_return,
+    "💵 예수금 현황": handle_deposit,
+    "💰 실시간 잔고": handle_balance,
+    "🔍 오늘자 스캔": handle_today_scan,
+    "🛑 긴급 전량 매도": handle_emergency_sell,
 }
 
 
 def process_updates():
-    """새 메시지/콜백을 확인하고 처리합니다."""
+    """새 메시지를 확인하고 처리합니다."""
     offset = load_offset()
     updates = get_updates(offset)
 
@@ -379,46 +368,42 @@ def process_updates():
     for update in updates:
         update_id = update["update_id"]
 
-        # 콜백 쿼리 (버튼 클릭)
-        if "callback_query" in update:
-            cb = update["callback_query"]
-            cb_id = cb["id"]
-            data = cb.get("data", "")
-            from_id = str(cb.get("from", {}).get("id", ""))
-
-            # 본인 확인
-            if from_id != str(CHAT_ID):
-                answer_callback(cb_id, "권한이 없습니다.")
-                save_offset(update_id + 1)
-                continue
-
-            print(f"🔘 버튼 클릭: {data}")
-            answer_callback(cb_id, "처리 중...")
-
-            handler = CALLBACK_HANDLERS.get(data)
-            if handler:
-                response = handler()
-                send_message(response, reply_markup=MENU_KEYBOARD)
-            else:
-                send_message("⚠️ 알 수 없는 명령입니다.")
-
-        # 텍스트 메시지
-        elif "message" in update:
+        # 텍스트 메시지 (리플라이 키보드 버튼 클릭 시)
+        if "message" in update:
             msg = update["message"]
             text = msg.get("text", "").strip()
             from_id = str(msg.get("from", {}).get("id", ""))
 
+            # 본인 확인
             if from_id != str(CHAT_ID):
                 save_offset(update_id + 1)
                 continue
 
+            # 메뉴 / 시작
             if text.lower() in ["/menu", "/start", "메뉴"]:
                 print(f"📋 메뉴 요청")
                 send_menu()
+
+            # 긴급 전량 매도 확인
             elif text == "전량매도":
                 print(f"🛑 긴급 전량 매도 실행!")
                 response = execute_emergency_sell()
-                send_message(response, reply_markup=MENU_KEYBOARD)
+                send_message(response, reply_markup=REPLY_KEYBOARD)
+
+            # 리플라이 키보드 버튼 매칭
+            elif text in TEXT_HANDLERS:
+                print(f"🔘 버튼: {text}")
+                handler = TEXT_HANDLERS[text]
+                response = handler()
+                send_message(response, reply_markup=REPLY_KEYBOARD)
+
+            # 승인/반려 (기존 로직과 연동)
+            elif text in ["승인", "반려"]:
+                print(f"✅ 승인/반려 입력: {text}")
+                # 기존 alpha_executor에서 처리하므로 여기서는 패스
+
+            else:
+                print(f"❓ 알 수 없는 입력: {text}")
 
         save_offset(update_id + 1)
 
@@ -428,3 +413,4 @@ if __name__ == "__main__":
     print(f"🤖 알파 텔레그램 메뉴 봇 ({datetime.now().strftime('%H:%M')})")
     print("=" * 50)
     process_updates()
+

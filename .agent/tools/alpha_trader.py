@@ -25,7 +25,7 @@ class AlphaTrader:
     # 1. 인증 (OAuth Token)
     # ───────────────────────────────────────────────────────────
     def get_access_token(self):
-        """24시간짜리 Access Token을 발급받습니다."""
+        """24시간짜리 Access Token을 발급받습니다. Rate Limit 시 자동 재시도."""
         if self.access_token and self.token_expiry and self.token_expiry > datetime.now():
             return self.access_token
 
@@ -36,20 +36,27 @@ class AlphaTrader:
             "appsecret": self.secret_key
         }
 
-        try:
-            res = requests.post(url, json=payload)
-            data = res.json()
-            if "access_token" in data:
-                self.access_token = data["access_token"]
-                self.token_expiry = datetime.now() + timedelta(hours=23)
-                print("✅ KIS 토큰 발급 성공!")
-                return self.access_token
-            else:
-                print(f"❌ 토큰 발급 실패: {data}")
+        for attempt in range(3):
+            try:
+                res = requests.post(url, json=payload)
+                data = res.json()
+                if "access_token" in data:
+                    self.access_token = data["access_token"]
+                    self.token_expiry = datetime.now() + timedelta(hours=23)
+                    print("✅ KIS 토큰 발급 성공!")
+                    return self.access_token
+                else:
+                    err = data.get('error_description', str(data))
+                    print(f"⚠️ 토큰 발급 실패 ({attempt+1}/3): {err}")
+                    if '1분당' in err or 'EGW' in data.get('error_code', ''):
+                        print("⏳ Rate Limit — 65초 대기 후 재시도...")
+                        time.sleep(65)
+                    else:
+                        return None
+            except Exception as e:
+                print(f"🚨 KIS 연결 에러: {e}")
                 return None
-        except Exception as e:
-            print(f"🚨 KIS 연결 에러: {e}")
-            return None
+        return None
 
     def _make_headers(self, tr_id):
         """공통 헤더를 생성합니다."""

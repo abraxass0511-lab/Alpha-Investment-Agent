@@ -44,13 +44,15 @@ def send_telegram(text):
 
 def check_approval():
     """
-    텔레그램에서 대표님의 "승인" 메시지를 확인합니다.
-    최근 10개 메시지 중 "승인"이 포함된 메시지가 있으면 True.
+    텔레그램에서 대표님의 응답을 확인합니다.
+    - "승인" → "approved"
+    - "반려" → "rejected"
+    - 미응답 → "pending"
     (1시간 이내의 메시지만 유효)
     """
     if not TELEGRAM_TOKEN or not CHAT_ID:
         print("⚠️ 텔레그램 설정 누락")
-        return False
+        return "pending"
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
     params = {"offset": -10, "limit": 10}
@@ -61,7 +63,7 @@ def check_approval():
 
         if not data.get("ok"):
             print(f"❌ 텔레그램 API 에러: {data}")
-            return False
+            return "pending"
 
         results = data.get("result", [])
         now = datetime.utcnow()
@@ -72,18 +74,21 @@ def check_approval():
             msg_date = datetime.utcfromtimestamp(msg.get("date", 0))
             sender_id = str(msg.get("chat", {}).get("id", ""))
 
-            # 조건: 대표님(CHAT_ID)이 보낸 / 1시간 이내 / "승인" 포함
+            # 대표님이 보낸 1시간 이내 메시지만 확인
             if sender_id == CHAT_ID and (now - msg_date) < timedelta(hours=1):
                 if "승인" in text:
                     print(f"✅ 대표님 승인 확인! (메시지: '{text}', 시각: {msg_date})")
-                    return True
+                    return "approved"
+                if "반려" in text:
+                    print(f"🛑 대표님 반려 확인. (메시지: '{text}', 시각: {msg_date})")
+                    return "rejected"
 
-        print("⏳ 아직 대표님의 승인 메시지가 없습니다.")
-        return False
+        print("⏳ 아직 대표님의 응답이 없습니다.")
+        return "pending"
 
     except Exception as e:
         print(f"🚨 텔레그램 확인 에러: {e}")
-        return False
+        return "pending"
 
 
 # ─────────────────────────────────────────────────────
@@ -265,22 +270,27 @@ if __name__ == "__main__":
         exit(0)
 
     # ── 2단계: 매수 대상이 있을 때만 승인 확인 ──
-    print(f"\n📡 [2] 매수 대상 {len(targets)}종목 확인 — 대표님 승인 확인 중...")
-    approved = check_approval()
+    print(f"\n📡 [2] 매수 대상 {len(targets)}종목 확인 — 대표님 응답 확인 중...")
+    status = check_approval()
 
-    if not approved:
-        print("\n⏳ 아직 승인이 없습니다. 대기합니다.")
-        # 승인 요청은 alpha_messenger.py 리포트에서 이미 했으므로
-        # 여기서는 간결한 리마인더만 전송
+    if status == "rejected":
+        # 대표님이 "반려" → 조용히 종료, 알림 없음
+        print("\n🛑 대표님이 반려하셨습니다. 조용히 종료합니다.")
+        exit(0)
+
+    if status == "pending":
+        # 아직 응답 없음 → 리마인더 전송
+        print("\n⏳ 아직 응답이 없습니다. 리마인더를 전송합니다.")
         stock_list = ", ".join(t["symbol"] for t in targets)
         send_telegram(
             f"⏳ *[알파 승인 대기]*\n"
-            f"매수 대상: *{stock_list}*\n"
-            f"\"승인\" 이라고 답장해 주시면 자동 매수를 시작합니다."
+            f"매수 대상: *{stock_list}*\n\n"
+            f"• \"승인\" → 자동 매수 시작\n"
+            f"• \"반려\" → 매수 취소"
         )
         exit(0)
 
-    # ── 3단계: 승인 확인 → 매수 집행 ──
+    # ── 3단계: "승인" 확인 → 매수 집행 ──
     print(f"\n⚔️ [3] 대표님 승인 확인! {len(targets)}개 종목 매수 집행 시작...")
     send_telegram(f"⚔️ *[알파 집행 시작]*\n대표님 승인 확인 — {len(targets)}개 종목 매수를 시작합니다.")
     results = execute_buy_orders(targets)

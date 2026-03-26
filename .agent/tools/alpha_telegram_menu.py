@@ -412,5 +412,14 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"🤖 알파 텔레그램 메뉴 봇 ({datetime.now().strftime('%H:%M')})")
     print("=" * 50)
-    process_updates()
 
+    # 최초 1회 메뉴 키보드 활성화 (플래그 파일로 중복 방지)
+    menu_flag = "output_reports/menu_activated.json"
+    if not os.path.exists(menu_flag):
+        print("📋 최초 실행 → 메뉴 키보드 활성화!")
+        send_menu()
+        os.makedirs(os.path.dirname(menu_flag), exist_ok=True)
+        with open(menu_flag, "w") as f:
+            json.dump({"activated": True, "time": datetime.now().isoformat()}, f)
+
+    process_updates()

@@ -1,54 +1,30 @@
-Symbol,Name,Price,ROE(%),MarketCap($B)
-AAPL,Apple Inc.,251.64,152.02,3698.59
-MSFT,Microsoft Corporation,372.74,34.39,2770.34
-GOOGL,Alphabet Inc.,290.44,35.71,3513.45
-AMZN,"Amazon.com, Inc.",207.24,22.29,2224.7
-META,"Meta Platforms, Inc.",592.92,30.24,1499.82
-NVDA,NVIDIA Corporation,175.2,101.48,4258.24
-JPM,JP Morgan Chase & Co.,292.4,16.13,788.61
-V,Visa Inc.,303.76,53.95,585.66
-JNJ,Johnson & Johnson,235.27,35.03,566.98
-WMT,Walmart Inc.,122.05,21.85,973.03
-MA,Mastercard Incorporated,498.93,209.91,445.26
-PG,Procter & Gamble Company (The),143.16,31.56,335.06
-HD,"Home Depot, Inc. (The)",330.91,145.54,329.59
-ADBE,Adobe Inc.,238.87,58.77,98.06
-NFLX,"Netflix, Inc.",90.92,42.76,385.67
-AVGO,Broadcom Inc.,318.29,33.37,1509.1
-COST,Costco Wholesale Corporation,973.82,29.65,432.25
-PEP,"Pepsico, Inc.",150.59,42.85,205.91
-KO,Coca-Cola Company (The),74.67,43.32,321.39
-CMCSA,Comcast Corporation,29.22,21.41,106.47
-LLY,Eli Lilly and Company,903.02,101.16,808.22
-ABBV,AbbVie Inc.,205.2,6225.0,362.83
-NKE,"Nike, Inc.",53.49,17.95,79.19
-MRK,"Merck & Company, Inc.",116.37,36.88,287.71
-ORCL,Oracle Corporation,147.09,57.57,423.04
-CSCO,"Cisco Systems, Inc.",80.86,23.75,319.49
-VZ,Verizon Communications Inc.,50.91,17.07,214.72
-TXN,Texas Instruments Incorporated,194.63,30.15,177.2
-T,AT&T Inc.,28.87,18.8,204.67
-UPS,"United Parcel Service, Inc.",98.44,33.77,83.64
-LMT,Lockheed Martin Corporation,610.17,76.87,141.19
-BMY,Bristol-Myers Squibb Company,57.39,40.44,116.87
-AMGN,Amgen Inc.,348.43,106.1,187.83
-HON,Honeywell International Inc.,221.57,26.14,140.85
-IBM,International Business Machines,240.59,35.16,225.77
-GE,GE Aerospace,290.63,44.69,306.56
-LIN,Linde plc,479.84,17.82,222.36
-DE,Deere & Company,583.02,19.57,157.48
-CAT,"Caterpillar, Inc.",716.63,43.53,335.37
-INTU,Intuit Inc.,432.45,23.46,120.34
-AXP,American Express Company,302.0,33.99,208.03
-ISRG,"Intuitive Surgical, Inc.",471.91,16.69,167.61
-AMT,American Tower Corporation (REI,170.36,26.28,79.75
-GILD,"Gilead Sciences, Inc.",138.11,40.66,171.45
-SYK,Stryker Corporation,328.51,15.08,125.72
-TJX,"TJX Companies, Inc. (The)",158.38,59.13,176.27
-ADP,"Automatic Data Processing, Inc.",204.89,73.84,82.87
-NOW,"ServiceNow, Inc.",104.65,15.49,110.42
-ZTS,Zoetis Inc.,115.93,65.99,51.09
-VRTX,Vertex Pharmaceuticals Incorpor,448.62,22.54,113.95
-CI,The Cigna Group,265.87,15.13,71.02
-MU,"Micron Technology, Inc.",395.53,39.82,446.05
-TGT,Target Corporation,115.92,24.03,52.5
+Symbol,Name,MarketCap,Price,MA50,ROE_Yahoo,Momentum(%),ROE(%),GrowthReason
+ALL,Allstate Corporation (The),53129584640,204.71,203.84100189208985,0.39518002,0.43,39.52,Yahoo Pass (EPS Growth: 98.8%)
+AMAT,"Applied Materials, Inc.",293111857152,369.34,342.7338043212891,0.38863,7.76,38.86,Yahoo Pass (EPS Growth: 71.0%)
+BMY,Bristol-Myers Squibb Company,120029757440,58.94,58.64939994812012,0.40442002,0.5,40.44,Yahoo Pass (EPS Growth: 1409.7%)
+CF,"CF Industries Holdings, Inc.",19686512640,128.11,102.23269973754883,0.23401,25.31,23.4,Yahoo Pass (EPS Growth: 23.2%)
+CSCO,"Cisco Systems, Inc.",323318087680,81.83,78.7,0.23754999,3.98,23.64,Yahoo Pass (EPS Growth: 30.8%)
+FIX,"Comfort Systems USA, Inc.",51872342016,1470.64,1298.40896484375,0.49238998,13.26,49.24,Yahoo Pass (EPS Growth: 126.8%)
+DAL,"Delta Air Lines, Inc.",44406353920,67.99,66.82005821228027,0.27693,1.75,27.63,Yahoo Pass (EPS Growth: 44.6%)
+EIX,Edison International,27401455616,71.19,68.11019996643067,0.24103001,4.52,24.1,Yahoo Pass (EPS Growth: 443.5%)
+EME,"EMCOR Group, Inc.",34235142144,764.76,739.2987976074219,0.3849,3.44,38.49,Yahoo Pass (EPS Growth: 48.8%)
+GRMN,Garmin Ltd.,47115456512,244.78,224.6542477416992,0.19783,8.96,19.78,Yahoo Pass (EPS Growth: 21.3%)
+GEV,GE Vernova Inc.,250615988224,923.69,791.1021569824219,0.42641,16.76,42.64,Yahoo Pass (EPS Growth: 657.0%)
+JBL,Jabil Inc.,30256533504,283.24,254.69359344482422,0.59696996,11.21,59.7,Yahoo Pass (EPS Growth: 90.6%)
+JNJ,Johnson & Johnson,578207023104,239.93,235.2745831298828,0.35029998,1.98,35.03,Yahoo Pass (EPS Growth: 49.1%)
+KEYS,Keysight Technologies Inc.,50275282944,293.12,254.11059936523438,0.17222999,15.35,17.22,Yahoo Pass (EPS Growth: 66.3%)
+KLAC,KLA Corporation,202846109696,1543.82,1478.3396337890624,1.00726,4.43,100.73,Yahoo Pass (EPS Growth: 39.0%)
+LRCX,Lam Research Corporation,293220188160,233.45,227.2683920288086,0.65565,2.72,65.56,Yahoo Pass (EPS Growth: 33.8%)
+LITE,Lumentum Holdings Inc.,55489937408,777.17,563.7816009521484,0.29275,37.85,29.28,Yahoo Pass (Revenue Growth: 65.5%)
+MPC,Marathon Petroleum Corporation,71106060288,241.25,201.86659759521484,0.24193001,19.51,24.19,Yahoo Pass (EPS Growth: 313.7%)
+MPWR,"Monolithic Power Systems, Inc.",54946344960,1118.66,1113.8991967773438,0.19173999,0.43,19.17,Yahoo Pass (Revenue Growth: 20.8%)
+NFLX,"Netflix, Inc.",391441547264,92.28,87.31579971313477,0.42762002,5.69,42.76,Yahoo Pass (EPS Growth: 29.4%)
+OKE,"ONEOK, Inc.",58015670272,92.12,82.6186979675293,0.15489,11.5,15.49,Yahoo Pass (Revenue Growth: 29.5%)
+PLTR,Palantir Technologies Inc.,370614075392,154.96,150.30560028076172,0.25983,3.1,25.98,Yahoo Pass (EPS Growth: 670.4%)
+PSX,Phillips 66,72650883072,181.29,156.3288671875,0.15427,15.97,15.43,Yahoo Pass (EPS Growth: 36225.0%)
+TPR,"Tapestry, Inc.",29915701248,146.18,143.01803634643554,0.55337,2.21,55.34,Yahoo Pass (EPS Growth: 80.8%)
+TRGP,"Targa Resources, Inc.",52762066944,245.46,219.32565612792968,0.51381,11.92,51.38,Yahoo Pass (EPS Growth: 55.3%)
+TER,"Teradyne, Inc.",50623930368,323.36,286.09645599365234,0.19734,13.02,19.73,Yahoo Pass (EPS Growth: 75.9%)
+TJX,"TJX Companies, Inc. (The)",177780834304,159.74,155.4654507446289,0.59129,2.75,59.13,Yahoo Pass (EPS Growth: 26.8%)
+VRT,"Vertiv Holdings, LLC",105658392576,276.16,227.20138580322265,0.41809,21.55,41.81,Yahoo Pass (EPS Growth: 203.1%)
+WMB,"Williams Companies, Inc. (The)",90163568640,73.81,69.74500694274903,0.18555,5.83,18.55,Yahoo Pass (EPS Growth: 51.0%)

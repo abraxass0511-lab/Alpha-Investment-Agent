@@ -12,11 +12,11 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 | 단계 | 미션 (Mission) | 상세 통과 기준 (Pass Criteria) | 데이터 소스 (Source) |
 | :--- | :--- | :--- | :--- |
 | **1단계** | **체급 (Size)** | **시가총액 $10B 이상** | Yahoo Finance |
-| **2단계** | **내실 (Quality)** | **ROE 15% 이상** | FMP API |
-| **3단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | Yahoo Finance |
+| **2단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | Yahoo Finance |
+| **3단계** | **내실 (Quality)** | **ROE 15% 이상** | FMP API |
 | **4단계** | **성장 (Growth)** | **Surprise > 10% OR Growth > 20%** | FMP API |
 | **5단계** | **심리 (Sentiment)** | **AI 심리 점수 0.7 이상** | Finnhub & AI |
-| **6단계** | **기세 (Elite 5)** | **12-1개월 모멘텀 상위 5개** | Yahoo Finance |
+| **6단계** | **기세 (Elite 5)** | **12-1개월 모멘텀 상위 5개** | FMP API |
 
 ## 📊 Operational Strategy
 

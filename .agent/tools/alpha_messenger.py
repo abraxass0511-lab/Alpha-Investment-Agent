@@ -44,14 +44,14 @@ def report_daily_picks():
     target_info = "📡 *대상: S&P500 종목 전체*\n\n"
     
     summary_table = "*📊 필터 현황 요약 (통과 기준)*\n"
-    summary_table += "| 구분 | 필터 항목 | 통과 수 | 통과 기준 |\n"
-    summary_table += "| :--- | :--- | :--- | :--- |\n"
-    summary_table += f"| **1단계** | **체급 (Size)** | {meta.get('step1', 0)}건 | 시총 *$10B+* |\n"
-    summary_table += f"| **2단계** | **내실 (Quality)** | {meta.get('step2', 0)}건 | ROE *15%+* |\n"
-    summary_table += f"| **3단계** | **에너지 (Momentum)** | {meta.get('step3', 0)}건 | 가격 *> 50MA* |\n"
-    summary_table += f"| **4단계** | **성장 (Growth)** | {meta.get('step4', 0)}건 | Surprise *10%* OR Growth *20%* |\n"
-    summary_table += f"| **5단계** | **심리 (Sentiment)** | {meta.get('step5', 0)}건 | 점수 *0.7+* |\n"
-    summary_table += f"| **6단계** | **기세 (Elite 5)** | {meta.get('step6', 0)}건 | 12-1 모멘텀 상위 5선 |\n\n"
+    summary_table += "| 구분 | 필터 항목 | 통과 수 | 통과 기준 | 소스 |\n"
+    summary_table += "| :--- | :--- | :--- | :--- | :--- |\n"
+    summary_table += f"| **1단계** | **체급 (Size)** | {meta.get('step1', 0)}건 | 시총 *$10B+* | Yahoo |\n"
+    summary_table += f"| **2단계** | **에너지 (Momentum)** | {meta.get('step2', 0)}건 | 가격 *> 50MA* | Yahoo |\n"
+    summary_table += f"| **3단계** | **내실 (Quality)** | {meta.get('step3', 0)}건 | ROE *15%+* | FMP |\n"
+    summary_table += f"| **4단계** | **성장 (Growth)** | {meta.get('step4', 0)}건 | Surprise *10%* OR Growth *20%* | FMP |\n"
+    summary_table += f"| **5단계** | **심리 (Sentiment)** | {meta.get('step5', 0)}건 | 점수 *0.7+* | Finnhub |\n"
+    summary_table += f"| **6단계** | **기세 (Elite 5)** | {meta.get('step6', 0)}건 | 12-1 모멘텀 상위 5선 | FMP |\n\n"
 
     analysis_section = "*🧠 심층 분석 결과 (최종 승인 대기)*\n"
     buy_stocks = []

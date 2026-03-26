@@ -73,12 +73,19 @@ def get_held_stocks():
 def check_held_against_scan(held_stocks, scan_data, picks_data):
     """
     보유 종목을 1~6단계 기준으로 재검증합니다.
-
+    
+    ★ 5단계(심리) 기준이 신규 매수와 다릅니다:
+      - 신규 매수: Sentiment ≥ 0.7 (뉴스 없으면 0.5)
+      - 기존 보유: Sentiment > 0.4 유지 (≤ 0.4 되면 매도 추천)
+    
     - daily_scan_latest.csv에 있음 = 1~4단계 통과
-    - final_picks_latest.csv에 있음 = 5~6단계까지 통과
+    - sentiment_all_latest.csv에서 보유종목 센티먼트 확인 (> 0.4)
     - 없으면 → 탈락 (어떤 단계에서 탈락했는지 분석)
     """
     sell_recommendations = []
+
+    # 센티먼트 전체 결과 로드 (보유종목 기준 0.4로 체크)
+    sentiment_data = load_csv("output_reports/sentiment_all_latest.csv")
 
     for stock in held_stocks:
         sym = stock["symbol"]
@@ -86,13 +93,12 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
 
         if sym in scan_data:
             row = scan_data[sym]
-            # 스캔에 있으면 1~4단계 통과, 5~6단계 체크
+            # 스캔에 있으면 1~4단계 통과, 세부 기준 재확인
             market_cap = float(row.get("MarketCap", "0"))
             price = float(row.get("Price", "0"))
             ma50 = float(row.get("MA50", "0"))
             roe = float(row.get("ROE(%)", "0"))
 
-            # 그래도 세부 기준 재확인
             if market_cap < 10_000_000_000:
                 reasons.append("1단계(체급) 탈락: 시총 $10B 미만")
             if price < ma50 and ma50 > 0:
@@ -100,17 +106,19 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
             if roe < 15:
                 reasons.append(f"3단계(내실) 탈락: ROE {roe:.1f}% < 15%")
 
-            # 5~6단계 체크: final_picks에 없으면 탈락
-            if sym not in picks_data and not reasons:
-                reasons.append("5~6단계(심리/기세) 탈락: 최종 선정 기준 미달")
+            # 5단계(심리) 보유종목 기준: > 0.4 유지
+            if sym in sentiment_data:
+                sent_row = sentiment_data[sym]
+                sent_score = float(sent_row.get("Sentiment", "0"))
+                if sent_score <= 0.4:
+                    reasons.append(f"5단계(심리) 탈락: 센티먼트 {sent_score:.2f} ≤ 0.4 (보유 유지 기준 미달)")
+            else:
+                # 센티먼트 데이터 없음 = 뉴스 없음 → 보유 유지 (0.5 취급)
+                pass  # 뉴스 없으면 보유 유지 OK
 
         else:
             # 스캔에 없음 → 1~4단계 중 탈락
-            # 어디서 탈락했는지 구체적으로 분석
             reasons.append("1~4단계 탈락: 오늘 스캔에서 기준 미달로 제외됨")
-
-            # 가능한 경우 추가 상세 원인 분석
-            # (scan에 없는 종목은 raw 데이터가 없으므로 간략 표기)
 
         if reasons:
             sell_recommendations.append({

@@ -162,6 +162,12 @@ def run_sentiment_v2():
         for future in as_completed(futures):
             res = future.result()
             if res: sentiment_passed.append(res)
+
+    # 전체 센티먼트 결과 저장 (리밸런서가 보유종목 기준 0.4로 재검증할 때 사용)
+    if sentiment_passed:
+        all_sent_df = pd.DataFrame(sentiment_passed)
+        all_sent_df.to_csv("output_reports/sentiment_all_latest.csv", index=False)
+        print(f"   💾 전체 센티먼트 결과 저장: {len(sentiment_passed)}종목")
             
     # 정합성 카운트 (BUY 전용 - Sentiment >= 0.7)
     buy_candidates = [p for p in sentiment_passed if "BUY" in p['Status']]
@@ -200,9 +206,6 @@ def run_sentiment_v2():
     else:
         pd.DataFrame().to_csv("output_reports/final_picks_latest.csv", index=False)
         print("❌ 최종 통과 종목 없음 (Step 5 기준 미달).")
-
-if __name__ == "__main__":
-    run_sentiment_v2()
 
 if __name__ == "__main__":
     run_sentiment_v2()

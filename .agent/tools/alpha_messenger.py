@@ -232,6 +232,40 @@ def report_daily_picks():
     else:
         final_result = "*🎯 최종 결과*\n*🛡️ 가디언 조치*: 정밀 필터링(0.7) 기준 미달. **전액 현금 보유 권고.**\n\n"
 
+    # ── AI 인사이트 (Gemini Flash — 읽기 전용, 숫자 생성 불가) ──
+    ai_insight = ""
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if api_key and meta:
+            # AI에게 metadata(숫자)를 읽기 전용으로 전달
+            insight_prompt = f"""다음은 오늘 S&P500 주식 스캔 결과입니다 (실제 데이터, 수정 불가):
+
+- 1단계(시총$10B+): {meta.get('step1',0)}건 통과
+- 2단계(ROE15%+): {meta.get('step2',0)}건 통과
+- 3단계(50MA돌파): {meta.get('step3',0)}건 통과
+- 4단계(성장): {meta.get('step4',0)}건 통과
+- 5단계(심리0.7+): {meta.get('step5',0)}건 통과
+- 6단계(최종): {meta.get('step6',0)}건 선정
+- 최종 종목: {', '.join(buy_stocks) if buy_stocks else '없음'}
+
+이 데이터(숫자)는 API에서 수집한 원본입니다. 절대 수정하지 마세요.
+한국어로 2~3문장 시장 코멘트를 작성하세요. 대표님에게 보고하는 말투로."""
+
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": insight_prompt}]}],
+                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 200},
+            }
+            r = requests.post(url, json=payload, timeout=15)
+            if r.status_code == 200:
+                text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                ai_insight = f"*🧠 AI 인사이트 (Gemini Flash)*\n{text}\n\n"
+            elif r.status_code == 429:
+                ai_insight = ""  # 무료 초과시 인사이트 생략 (보고서는 정상 발송)
+    except Exception as e:
+        print(f"⚠️ AI 인사이트 생성 에러 (보고서는 정상 발송): {e}")
+        ai_insight = ""
+
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
     if meta.get("success_all", False):
         footer = "📝 _비고 : 야후, FMP에서 모든 정보 받음_"
@@ -249,7 +283,7 @@ def report_daily_picks():
     except Exception as e:
         print(f"⚠️ 휴장 안내 생성 에러: {e}")
 
-    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + footer + "\n\n" + portfolio_section
+    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + ai_insight + footer + "\n\n" + portfolio_section
     
     # 3. 로컬 파일 저장 (메모장 대용)
     if not os.path.exists("output_reports"): os.makedirs("output_reports")

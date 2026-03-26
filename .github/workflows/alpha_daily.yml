@@ -19,6 +19,7 @@ jobs:
       KIS_CANO: ${{ secrets.KIS_CANO }}
       KIS_ACNT_PRDT_CD: ${{ secrets.KIS_ACNT_PRDT_CD }}
       KIS_BASE_URL: ${{ secrets.KIS_BASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
     steps:
     - name: Checkout code

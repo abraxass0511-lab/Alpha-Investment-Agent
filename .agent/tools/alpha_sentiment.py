@@ -59,49 +59,138 @@ def select_quality_news(news_list):
     sorted_news = sorted(scored_news, key=lambda x: x['score'], reverse=True)
     return sorted_news[:10]
 
+def gemini_sentiment_score(headlines, symbol):
+    """
+    [Gemini Flash AI 센티먼트 분석]
+    
+    ★ 절대 원칙 ★
+    - AI는 뉴스 헤드라인을 읽고 점수(0.0~1.0)와 한줄 사유 반환만 함
+    - AI가 주가, 시총, ROE 등 숫자 데이터를 생성하거나 수정하는 것은 불가능
+    - 실패 시 None을 반환하여 VADER 백업으로 전환
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or not headlines:
+        return None
+
+    headlines_text = "\n".join([f"- {h}" for h in headlines[:10]])
+
+    prompt = f"""다음은 {symbol} 종목에 대한 최근 뉴스 헤드라인입니다:
+
+{headlines_text}
+
+이 뉴스들을 종합적으로 분석하여 투자 심리 점수를 매겨주세요.
+
+규칙:
+1. 점수는 0.0(매우 부정) ~ 1.0(매우 긍정) 사이의 소수점 2자리 숫자
+2. 반드시 아래 JSON 형식으로만 답하세요. 다른 텍스트 금지.
+3. reason은 한국어로 30자 이내
+
+{{"score": 0.75, "reason": "실적 호조와 신규 계약 긍정적"}}"""
+
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 100},
+        }
+        r = requests.post(url, json=payload, timeout=15)
+        
+        if r.status_code == 429:
+            print(f"    ⚠️ Gemini 무료 초과 → VADER 백업 ({symbol})")
+            return None
+        if r.status_code != 200:
+            return None
+
+        text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        
+        # JSON 파싱 (엄격 검증)
+        # ```json ... ``` 래핑 제거
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        
+        result = json.loads(text)
+        score = float(result.get("score", -1))
+        reason = str(result.get("reason", ""))
+
+        # ★ 엄격 검증: 0.0~1.0 범위 밖이면 거부
+        if score < 0.0 or score > 1.0:
+            print(f"    ❌ Gemini 비정상 점수({score}) → VADER 백업 ({symbol})")
+            return None
+
+        return {"score": round(score, 3), "reason": reason[:50]}
+
+    except Exception as e:
+        print(f"    ⚠️ Gemini 에러({e}) → VADER 백업 ({symbol})")
+        return None
+
+
 def analyze_ticker_finnhub(row):
+    """
+    ★ 5단계 심리 분석 (Gemini Flash + VADER 이중 검증) ★
+    
+    데이터 무결성 원칙:
+    - Symbol, Name, Price, ROE, Momentum 등 모든 숫자는 row(CSV 원본)에서만 가져옴
+    - AI는 뉴스 헤드라인 판독만 수행 → 점수(0~1)와 사유 반환
+    - AI가 row의 어떤 값도 생성하거나 수정할 수 없음
+    """
+    # ★ 숫자 데이터는 반드시 CSV 원본(row)에서만 추출 ★
     symbol = row.get('Symbol')
     name = row.get('Name')
+    price = row['Price']         # API 원본 그대로
+    momentum = row['Momentum(%)']  # API 원본 그대로
+    roe = row['ROE(%)']          # API 원본 그대로
     
+    # 1. Finnhub에서 실제 뉴스 수집 (AI 아님)
     news = fetch_finnhub_news(symbol)
     quality_news = select_quality_news(news)
     
     if not quality_news: return None
     
-    sentiment_scores = []
-    premium_found = False
-    for item in quality_news:
-        title = item['title']
-        v_score = analyzer.polarity_scores(title)['compound']
-        
-        # 만약 로이터/블룸버그급 뉴스라면 가중치 적용
-        if item['score'] >= 10: 
-            v_score *= 1.2
-            premium_found = True
-            
-        sentiment_scores.append(v_score)
-        
-    avg_score = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
-    final_score = round(avg_score, 3)
+    headlines = [item['title'] for item in quality_news]
+    premium_found = any(item['score'] >= 10 for item in quality_news)
     
-    # 대표님 매수 원칙: 0.7+ (BUY)
+    # 2. Gemini Flash로 심리 분석 시도
+    ai_result = gemini_sentiment_score(headlines, symbol)
+    
+    if ai_result:
+        # ★ AI 성공: Gemini 점수 사용 ★
+        final_score = ai_result["score"]
+        ai_reason = ai_result["reason"]
+        engine = "Gemini Flash 🧠"
+    else:
+        # ★ AI 실패: VADER 백업 (기존 로직 그대로) ★
+        sentiment_scores = []
+        for item in quality_news:
+            title = item['title']
+            v_score = analyzer.polarity_scores(title)['compound']
+            if item['score'] >= 10:
+                v_score *= 1.2
+            sentiment_scores.append(v_score)
+        final_score = round(
+            sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0,
+            3
+        )
+        ai_reason = "VADER 규칙 기반 분석"
+        engine = "VADER 📡"
+    
+    # 3. 매수 상태 판정 (기준은 동일)
     status = "REJECT"
     if final_score >= 0.7: status = "BUY (매수 승인 대기)"
     elif final_score >= 0.4: status = "HOLD (관망/대기)"
     
-    if final_score < 0.3: return None # 0.3 미만은 아예 제외
+    if final_score < 0.3: return None
     
-    # 핵심 근거 동적 생성
     source_label = "Premium 🏛️" if premium_found else "Stable 📡"
-    reason = f"{name} ({symbol})은 최근 {source_label} 뉴스 소스를 통해 긍정적 흐름이 포착되었습니다. (심리 점수: {final_score})"
+    reason = f"{ai_reason} ({engine}, {source_label}, 점수: {final_score})"
     
+    # ★ 반환값: 숫자는 100% row 원본, AI는 reason만 제공 ★
     return {
         "Symbol": symbol,
         "Name": name,
-        "Price": row['Price'],
-        "Momentum(%)": row['Momentum(%)'],
+        "Price": price,           # API 원본
+        "Momentum(%)": momentum,  # API 원본
         "Sentiment": final_score,
-        "ROE(%)": row['ROE(%)'],
+        "ROE(%)": roe,            # API 원본
         "Status": status,
         "Reason": reason
     }

@@ -295,9 +295,9 @@ def run_scan():
     receive_rate = round(received / total * 100, 1)
     print(f"   📊 최종 수신: {received}/{total}종목 ({receive_rate}%)")
 
-    if receive_rate < 90:
-        print(f"   🚨 수신율 {receive_rate}% < 90% → 스캔 중단")
-        return
+    if received < total:
+        missing_count = total - received
+        print(f"   ⚠️ {missing_count}종목 미수신 (2회 재시도 후에도 복구 실패 → 필터 탈락 처리)")
 
     # 1단계: 시총 $10B+
     stage1 = []

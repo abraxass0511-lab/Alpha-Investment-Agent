@@ -78,38 +78,24 @@ export default {
       // 주말 및 미국 공휴일에는 실행하지 않고 예약 상태를 그대로 유지 (다음 거래일에 실행되도록)
       if (!isTradingDay(new Date())) return;
 
-      // 1. 긴급 전량 매도 / 구글 매도 예약 실행
+      // 1. 긴급 전량 매도 예약 실행
       const sellPend = await env.KV.get("pending_sell");
       if (sellPend) {
         const data = JSON.parse(sellPend);
         if (data.type === "sell_all") {
           const result = await executeEmergencySell(env);
           await sendMessage(env, "⏰ *[예약 매도 실행]*\n\n" + result, REPLY_KEYBOARD);
-        } else if (data.type === "test_sell_google") {
-          const price = await getYahooPrice("GOOGL");
-          if (price) {
-            const ok = await sellOrder(env, "GOOGL", 1, (price * 0.98).toFixed(2));
-            const result = ok ? "✅ GOOGL 1주 시장가(지정가 하향) 매도 완료" : "❌ GOOGL 매도 실패";
-            await sendMessage(env, "🧪 *[테스트 예약 매도 실행]*\n\n" + result, REPLY_KEYBOARD);
-          }
         }
         await env.KV.delete("pending_sell");
       }
 
-      // 2. 포트폴리오 승인 매수/매도 / 구글 매수 예약 실행
+      // 2. 포트폴리오 승인 매수/매도 예약 실행
       const appPend = await env.KV.get("pending_approval");
       if (appPend) {
         const data = JSON.parse(appPend);
         if (data.type === "approval") {
           const result = await executeApproval(env);
           await sendMessage(env, "⏰ *[예약 승인(매수/매도) 자동 집행]*\n\n" + result, REPLY_KEYBOARD);
-        } else if (data.type === "test_buy_google") {
-          const price = await getYahooPrice("GOOGL");
-          if (price) {
-            const ok = await buyOrder(env, "GOOGL", 1, (price * 1.02).toFixed(2));
-            const result = ok ? "✅ GOOGL 1주 시장가(지정가 상향) 매수 완료" : "❌ GOOGL 매수 실패 (예수금 부족 등)";
-            await sendMessage(env, "🧪 *[테스트 예약 매수 실행]*\n\n" + result, REPLY_KEYBOARD);
-          }
         }
         await env.KV.delete("pending_approval");
       }

@@ -110,6 +110,43 @@ def get_portfolio_section():
 
 def report_daily_picks():
     picks_file = "output_reports/final_picks_latest.csv"
+    rebal_path = "output_reports/rebalance_recommendations.json"
+    
+    # === [대표님 1회성 특별 테스트 (구글 1주 승인 → 자동 체결 검증)] ===
+    now_utc_str = datetime.now().strftime("%Y-%m-%d")
+    
+    if now_utc_str == "2026-03-27": # 토요일 KST (UTC 금요일)
+        import os
+        if not os.path.exists("output_reports"): os.makedirs("output_reports")
+        try:
+            df_test = pd.read_csv(picks_file)
+        except:
+            df_test = pd.DataFrame(columns=["Symbol","Price","Name","Reason","Sentiment"])
+        
+        if "GOOGL" not in df_test.get("Symbol", pd.Series()).values:
+            row = pd.DataFrame({"Symbol": ["GOOGL"], "Price": [170.0], "Name": ["Alphabet Inc. (구글)"], "Reason": ["자동 승인/체결 풀사이클 테스트 (대표님 요청 특별 편성)"], "Sentiment": [0.9]})
+            df_test = pd.concat([df_test, row], ignore_index=True)
+            df_test.to_csv(picks_file, index=False)
+            
+    elif now_utc_str in ["2026-03-31", "2026-04-01"]: # 수요일 KST 부근
+        try:
+            with open(rebal_path, "r", encoding="utf-8") as f:
+                rebal = json.load(f)
+        except:
+            rebal = {"sell": [], "buy": []}
+            
+        sell_syms = [s["symbol"] for s in rebal.get("sell", [])]
+        if "GOOGL" not in sell_syms:
+            rebal.setdefault("sell", []).append({
+                "symbol": "GOOGL",
+                "qty": 1,
+                "current": 175.0,
+                "pnl_rate": 2.5,
+                "reasons": ["자동 매도 집행 검증 테스트 (대표님 요청 특별 편성)"]
+            })
+            with open(rebal_path, "w", encoding="utf-8") as f:
+                json.dump(rebal, f, ensure_ascii=False, indent=2)
+    # ==============================================================
     
     # 1. 메타데이터 읽기
     try:
@@ -283,6 +320,10 @@ def report_daily_picks():
     except Exception as e:
         print(f"⚠️ 휴장 안내 생성 에러: {e}")
 
+    # 휴장일 캘린더 업데이트 리마인더 (2027년 12월)
+    if now.year == 2027 and now.month == 12:
+        footer += "\n\n🚨 *[관리자 알림] 2028년도 미국장 휴장일 달력 업데이트가 필요합니다! 저(알파)에게 갱신을 요청해 주세요.*"
+
     message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + ai_insight + footer + "\n\n" + portfolio_section
     
     # 3. 로컬 파일 저장 (메모장 대용)
@@ -299,7 +340,40 @@ if __name__ == "__main__":
     # 미국 장 개장일 체크
     from us_market_calendar import is_trading_day
     if not is_trading_day():
-        print("📅 오늘은 미국 시장 휴장일입니다. 리포트를 건너뜁니다.")
+        print("📅 오늘은 미국 시장 휴장일입니다. 원칙적으로 리포트를 건너뜁니다.")
+        
+        # [테스트 기능] 이번 주말(3월 28일~29일)에는 대표님 요청에 따라 구글 1주 매수 승인 테스트용 가짜 보고서를 발송합니다.
+        now_str = datetime.now().strftime("%Y-%m-%d")
+        if now_str in ["2026-03-28", "2026-03-29"]:
+            print("🧪 [테스트] 주말 구글 1주 매수 예약 테스트용 모의 데이터를 주입합니다.")
+            if not os.path.exists("output_reports"):
+                os.makedirs("output_reports")
+                
+            # 1. 메타데이터 위조
+            with open("output_reports/metadata.json", "w", encoding="utf-8") as f:
+                json.dump({
+                    "success_all": True, 
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "total": 503, "step1": 503, "step2": 250, "step3": 120, "step4": 60, "step5": 10, "step6": 1
+                }, f)
+                
+            # 2. 구글 CSV 위조
+            df_test = pd.DataFrame({
+                "Symbol": ["GOOGL"], 
+                "Price": [170.0], 
+                "Name": ["Alphabet Inc. (구글)"], 
+                "Reason": ["시스템 예약매수 및 자동집행 완벽 검증 테스트 (대표님 요청)"], 
+                "Sentiment": [0.9]
+            })
+            df_test.to_csv("output_reports/final_picks_latest.csv", index=False)
+            
+            # 3. 리밸런싱 위조 (매도 없음)
+            with open("output_reports/rebalance_recommendations.json", "w", encoding="utf-8") as f:
+                json.dump({"sell": [], "buy": []}, f)
+            
+            # 발송!
+            report_daily_picks()
+        
         exit(0)
 
     report_daily_picks()

@@ -134,9 +134,14 @@ const REPLY_KEYBOARD = {
 
 // === KIS API ===
 let _cachedToken = null;
+let _tokenIssuedAt = 0;
+const TOKEN_TTL = 6 * 3600 * 1000 - 5 * 60 * 1000; // 5시간 55분 (ms)
 
-async function getKisToken(env) {
-  if (_cachedToken) return _cachedToken;
+async function getKisToken(env, forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && _cachedToken && (now - _tokenIssuedAt) < TOKEN_TTL) {
+    return _cachedToken;
+  }
   const url = `${env.KIS_BASE_URL}/oauth2/tokenP`;
   const r = await fetch(url, {
     method: "POST",
@@ -149,6 +154,7 @@ async function getKisToken(env) {
   });
   const data = await r.json();
   _cachedToken = data.access_token;
+  _tokenIssuedAt = now;
   return _cachedToken;
 }
 
@@ -178,9 +184,10 @@ async function getBalance(env, _retry = false) {
 
   const data = await r.json();
   if (data.rt_cd === "0") return data.output1 || [];
-  // Token expired - clear cache and retry ONCE
-  if (!_retry && data.msg1 && data.msg1.includes("token")) {
+  // Token expired - force refresh and retry ONCE
+  if (!_retry) {
     _cachedToken = null;
+    _tokenIssuedAt = 0;
     return getBalance(env, true);
   }
   return null;
@@ -216,9 +223,10 @@ async function getBuyingPower(env, _retry = false) {
       ord_psbl_frcr_amt: output.ord_psbl_frcr_amt || output.ovrs_ord_psbl_amt || "0",
     };
   }
-  // Token expired - retry ONCE
-  if (!_retry && data.msg1 && data.msg1.includes("token")) {
+  // Token expired - force refresh and retry ONCE
+  if (!_retry) {
     _cachedToken = null;
+    _tokenIssuedAt = 0;
     return getBuyingPower(env, true);
   }
   return null;

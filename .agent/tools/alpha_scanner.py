@@ -1,5 +1,6 @@
 import os
 import json
+import signal
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
@@ -9,6 +10,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import random
 from dotenv import load_dotenv
+
+# ============================================================
+# Global Timeout: 90 min max
+# ============================================================
+SCAN_TIMEOUT = 90 * 60  # 90 minutes
+SCAN_START = time.time()
+
+def check_timeout():
+    elapsed = time.time() - SCAN_START
+    if elapsed > SCAN_TIMEOUT:
+        print(f"\n🚨 스캔 타임아웃! ({int(elapsed//60)}분 경과, 제한: {SCAN_TIMEOUT//60}분)")
+        return True
+    return False
 
 load_dotenv()
 FMP_KEY = os.getenv("FMP_API_KEY")
@@ -24,11 +38,12 @@ USER_AGENTS = [
 fmp_call_count = 0
 
 def fmp_request(url, timeout=15):
-    """FMP API 통합 호출 함수 - 429 자동 재시도 + 호출 카운트"""
+    """FMP API - 429 auto retry + call count (max 3 retries)"""
     global fmp_call_count
-    max_retries = 5
+    max_retries = 3
     
     for attempt in range(max_retries):
+        if check_timeout(): return None
         try:
             fmp_call_count += 1
             r = requests.get(url, timeout=timeout)
@@ -37,18 +52,17 @@ def fmp_request(url, timeout=15):
                 return r
             
             if r.status_code == 429:
-                wait_time = 60 * (attempt + 1)
-                print(f"    ⏳ FMP 429 (시도 {attempt+1}/{max_retries}) → {wait_time}초 대기 후 재시도...")
+                wait_time = min(30 * (attempt + 1), 60)  # max 60s wait
+                print(f"    ⏳ FMP 429 (시도 {attempt+1}/{max_retries}) → {wait_time}초 대기...")
                 time.sleep(wait_time)
                 continue
             
-            # 기타 에러
-            print(f"    ⚠️ FMP HTTP {r.status_code} → 30초 대기 후 재시도...")
-            time.sleep(30)
+            print(f"    ⚠️ FMP HTTP {r.status_code} → 15초 대기...")
+            time.sleep(15)
             
         except Exception as e:
-            print(f"    ⚠️ FMP 에러({e}) → 30초 대기 후 재시도...")
-            time.sleep(30)
+            print(f"    ⚠️ FMP 에러({e}) → 10초 대기...")
+            time.sleep(10)
     
     return None
 
@@ -59,7 +73,7 @@ def get_sp500_tickers():
     url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
     headers = {'User-Agent': random.choice(USER_AGENTS)}
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=30)
         soup = BeautifulSoup(response.text, 'html.parser')
         table = soup.find('table', {'id': 'constituents'})
         tickers = []
@@ -184,27 +198,33 @@ def run_persistent_scan():
     # ============================================================
     results = {}
     remaining_tickers = list(tickers)
+    max_yahoo_retries = 5  # max 5 retries (was 30)
     
     attempt = 1
     while remaining_tickers:
+        if check_timeout(): break
         print(f"🔄 시도 {attempt}: 남은 종목 {len(remaining_tickers)}개 스캔 중...")
         
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_to_symbol = {executor.submit(process_item, s): s for s in remaining_tickers}
-            for future in as_completed(future_to_symbol):
+            for future in as_completed(future_to_symbol, timeout=300):  # 5min timeout per batch
                 symbol = future_to_symbol[future]
-                res = future.result()
-                if res:
-                    results[symbol] = res
+                try:
+                    res = future.result(timeout=60)  # 1min per stock
+                    if res:
+                        results[symbol] = res
+                except Exception:
+                    pass
         
         remaining_tickers = [s for s in tickers if s not in results]
         
         if remaining_tickers:
-            print(f"⚠️ {len(remaining_tickers)}개 누락. 짧은 대기 후 다시 시도합니다...")
-            time.sleep(attempt * 2 + random.random() * 5)
+            coverage = len(results) / total_count * 100
+            print(f"⚠️ {len(remaining_tickers)}개 누락 (커버리지: {coverage:.0f}%). 대기 후 재시도...")
+            time.sleep(min(attempt * 3, 15))
             attempt += 1
-            if attempt > 30:
-                print("🚨 30회 시도 후 중단. (야후 차단 심각)")
+            if attempt > max_yahoo_retries:
+                print(f"🚨 {max_yahoo_retries}회 시도 후 중단. (커버리지: {coverage:.0f}%)")
                 break
 
     # ============================================================

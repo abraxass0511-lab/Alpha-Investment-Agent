@@ -1,9 +1,10 @@
 """
-alpha_notify_failure.py - 스캔 실패 시 텔레그램 알림 발송
+alpha_notify_failure.py — 스캔 실패 시 텔레그램 알림 발송 (V3)
 """
 import json
 import os
 import requests
+
 
 def notify_failure():
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -14,20 +15,35 @@ def notify_failure():
 
     try:
         meta = json.load(open("output_reports/metadata.json"))
-    except:
-        meta = {"total": 503, "yahoo_collected": 0}
+    except Exception:
+        meta = {}
 
     total = meta.get("total", 503)
-    collected = meta.get("yahoo_collected", 0)
-    missing = total - collected
+    received = meta.get("received", 0)
+    receive_rate = meta.get("receive_rate", 0)
+    step1 = meta.get("step1", 0)
+    step2 = meta.get("step2", 0)
+    step3 = meta.get("step3", 0)
+    step4 = meta.get("step4", 0)
+    fmp_calls = meta.get("fmp_calls", 0)
+    fmp_remaining = meta.get("fmp_remaining", 0)
+    elapsed = meta.get("elapsed_min", 0)
+    engine = meta.get("engine", "Unknown")
 
     msg = (
-        "\u26a0\ufe0f *\uc2a4\uce94 \uc2e4\ud328 \uc54c\ub9bc*\n\n"
-        f"\u26a0\ufe0f 1\ub2e8\uacc4(Yahoo \uc218\uc9d1), {total}\uac1c \uc885\ubaa9 \uc911 {missing}\uac1c\uac00 \ub204\ub77d\ub418\uc5c8\uc2b5\ub2c8\ub2e4.\n"
-        f"(\uc218\uc9d1 \uc644\ub8cc: {collected}/{total})\n\n"
-        "\ub2e4\uc2dc \uc2dc\ub3c4\ud558\uc2dc\uaca0\uc2b5\ub2c8\uae4c?\n"
-        "\u2192 \"\uc2dc\ub3c4\" \uc785\ub825: \ucc98\uc74c\ubd80\ud130 \uc7ac\uc2dc\ub3c4\n"
-        "\u2192 \"\uc885\ub8cc\" \uc785\ub825: \uc624\ub298\uc740 \uac74\ub108\ub6f0"
+        "⚠️ *스캔 실패 알림*\n\n"
+        f"📊 *수신율*: {received}/{total}종목 ({receive_rate}%)\n\n"
+        f"*단계별 결과:*\n"
+        f"  1단계(체급): {step1}건\n"
+        f"  2단계(에너지): {step2}건\n"
+        f"  3단계(내실): {step3}건\n"
+        f"  4단계(성장): {step4}건\n\n"
+        f"📡 FMP 사용: {fmp_calls}콜 (잔여: {fmp_remaining})\n"
+        f"⏱️ 소요: {elapsed}분\n"
+        f"🔧 엔진: {engine}\n\n"
+        "다시 시도하시겠습니까?\n"
+        "→ \"시도\" 입력: 처음부터 재시도\n"
+        "→ \"종료\" 입력: 오늘은 건너뜀"
     )
 
     requests.post(
@@ -35,7 +51,8 @@ def notify_failure():
         json={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"},
         timeout=30,
     )
-    print(f"\u26a0\ufe0f \uc2a4\uce94 \uc2e4\ud328 \uc54c\ub9bc \uc804\uc1a1 \uc644\ub8cc (\ub204\ub77d: {missing}/{total})")
+    print(f"⚠️ 스캔 실패 알림 전송 완료")
+
 
 if __name__ == "__main__":
     notify_failure()

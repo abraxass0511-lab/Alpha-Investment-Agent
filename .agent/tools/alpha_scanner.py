@@ -234,7 +234,7 @@ def check_growth_fmp(symbol):
     if not s_res:
         return False, f"FMP Surprise Failed ({symbol})"
 
-    time.sleep(13)  # FMP Rate Limit 준수
+    time.sleep(1)  # 병렬 실행 시 배치 간 대기로 Rate Limit 제어
 
     url_g = f"https://financialmodelingprep.com/api/v3/financial-growth/{symbol}?period=quarter&limit=1&apikey={FMP_KEY}"
     g_res = fmp_request(url_g)
@@ -395,20 +395,40 @@ def run_scan():
         c3 = len(stage3)
 
     stage4 = []
-    for i, item in enumerate(stage3):
+    BATCH_SIZE = 5  # 5종목 동시 검증
+    import concurrent.futures
+
+    def _check_growth_worker(item):
+        """4단계 개별 검증 워커"""
+        sym = item["Symbol"]
+        passed, reason = check_growth_fmp(sym)
+        return item, passed, reason
+
+    for batch_start in range(0, c3, BATCH_SIZE):
         if check_timeout():
             break
-        sym = item["Symbol"]
-        print(f"🔍 [4단계] {sym} ({i+1}/{c3})")
+        batch = stage3[batch_start:batch_start + BATCH_SIZE]
+        batch_end = min(batch_start + BATCH_SIZE, c3)
+        print(f"🔍 [4단계] 배치 {batch_start+1}~{batch_end}/{c3} 검증 중...")
 
-        passed, reason = check_growth_fmp(sym)
-        if passed:
-            item["GrowthReason"] = reason
-            stage4.append(item)
-            print(f"    ✅ {sym} → {reason}")
-        else:
-            print(f"    ❌ {sym} → {reason}")
-        time.sleep(15)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=BATCH_SIZE) as executor:
+            futures = {executor.submit(_check_growth_worker, item): item for item in batch}
+            for future in concurrent.futures.as_completed(futures, timeout=120):
+                try:
+                    item, passed, reason = future.result()
+                    sym = item["Symbol"]
+                    if passed:
+                        item["GrowthReason"] = reason
+                        stage4.append(item)
+                        print(f"    ✅ {sym} → {reason}")
+                    else:
+                        print(f"    ❌ {sym} → {reason}")
+                except Exception as e:
+                    print(f"    ⚠️ 검증 에러: {e}")
+
+        # 배치 간 대기 (Rate Limit 준수: 5종목×2콜=10콜 후 15초 대기)
+        if batch_end < c3:
+            time.sleep(15)
 
     c4 = len(stage4)
     print(f"\n✅ [4단계] 성장: {c4}건 통과")

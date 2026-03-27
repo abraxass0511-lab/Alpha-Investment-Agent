@@ -22,84 +22,77 @@ def send_telegram_message(text):
 
 
 def get_portfolio_section():
-    """보유종목 현황과 예수금을 조회하여 리포트 섹션을 생성합니다."""
+    """보유종목 현황과 예수금을 Cloudflare Worker 경유로 조회합니다."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-        from alpha_trader import AlphaTrader
+        worker_url = os.getenv("WORKER_URL", "")
+        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
 
-        trader = AlphaTrader()
+        if not worker_url:
+            return "\n⚠️ Worker URL 미설정\n"
 
-        # 예수금 조회
-        buying_power = trader.get_buying_power(symbol="AAPL", price="0")
+        r = requests.get(
+            f"{worker_url}/api/portfolio",
+            headers={"Authorization": f"Bearer {worker_key}"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return f"\n⚠️ 포트폴리오 조회 실패 (HTTP {r.status_code})\n"
 
-        # 보유 종목 조회
-        balance = trader.get_balance()
+        data = r.json()
+        holdings = data.get("holdings", [])
+        usd_amt = data.get("buying_power", "0")
 
         section = "\n━━━━━━━━━━━━━━━━━━\n"
         section += "*💼 포트폴리오 현황*\n"
         section += "━━━━━━━━━━━━━━━━━━\n"
-
-        # 예수금 정보
-        if buying_power:
-            usd_amt = buying_power.get("ord_psbl_frcr_amt", "N/A")
-            section += f"💰 예수금(USD): *${usd_amt}*\n\n"
+        section += f"💰 예수금(USD): *${usd_amt}*\n\n"
 
         # 고점 기록 로드 (트레일링 스탑 표시용)
         peak_data = {}
         try:
-            import json as _json
             peak_path = "output_reports/peak_prices.json"
             if os.path.exists(peak_path):
                 with open(peak_path, "r") as f:
-                    peak_data = _json.load(f)
+                    peak_data = json.load(f)
         except:
             pass
 
-        # 보유 종목 정보
-        if balance:
-            holdings, summary = balance
-            if holdings:
-                total_pnl = 0
-                total_eval = 0
-                total_invested = 0
+        if holdings:
+            total_pnl = 0
+            total_eval = 0
+            total_invested = 0
 
-                for h in holdings:
-                    sym = h.get('ovrs_pdno', '?')
-                    qty = int(float(h.get('ovrs_cblc_qty', '0')))
-                    buy_avg = float(h.get('pchs_avg_pric', '0'))
-                    cur = float(h.get('now_pric2', '0'))
-                    pnl = float(h.get('frcr_evlu_pfls_amt', '0'))
-                    pnl_rt = float(h.get('evlu_pfls_rt', '0'))
+            for h in holdings:
+                sym = h.get("symbol", "?")
+                qty = h.get("qty", 0)
+                buy_avg = h.get("buy_avg", 0)
+                cur = h.get("current", 0)
+                pnl = h.get("pnl_amt", 0)
+                pnl_rt = h.get("pnl_rate", 0)
 
-                    if qty <= 0:
-                        continue
+                eval_amt = cur * qty
+                total_pnl += pnl
+                total_eval += eval_amt
+                total_invested += buy_avg * qty
 
-                    eval_amt = cur * qty
-                    total_pnl += pnl
-                    total_eval += eval_amt
-                    total_invested += buy_avg * qty
+                emoji = "🟢" if pnl >= 0 else "🔴"
 
-                    emoji = "🟢" if pnl >= 0 else "🔴"
+                section += f"{emoji} *{sym}*\n"
+                section += f"   {qty}주 × ${cur:.2f} | 매입 ${buy_avg:.2f}\n"
+                section += f"   평가: ${eval_amt:,.2f} | *{pnl_rt:+.1f}%* ({pnl:+,.2f})\n"
 
-                    section += f"{emoji} *{sym}*\n"
-                    section += f"   {qty}주 × ${cur:.2f} | 매입 ${buy_avg:.2f}\n"
-                    section += f"   평가: ${eval_amt:,.2f} | *{pnl_rt:+.1f}%* ({pnl:+,.2f})\n"
+                if sym in peak_data:
+                    peak = peak_data[sym].get("peak", cur)
+                    stop_line = peak * 0.9
+                    section += f"   🛡️ 고점 ${peak:.2f} → 손절선 ${stop_line:.2f}\n"
 
-                    # 트레일링 스탑 손절선 표시
-                    if sym in peak_data:
-                        peak = peak_data[sym].get("peak", cur)
-                        stop_line = peak * 0.9
-                        section += f"   🛡️ 고점 ${peak:.2f} → 손절선 ${stop_line:.2f}\n"
+                section += "\n"
 
-                    section += "\n"
-
-                if total_invested > 0:
-                    total_rate = (total_pnl / total_invested) * 100
-                    section += f"💵 총 평가손익: *{total_pnl:+,.2f}* ({total_rate:+.1f}%)\n"
-            else:
-                section += "📭 보유 종목 없음 (현금 100%)\n"
+            if total_invested > 0:
+                total_rate = (total_pnl / total_invested) * 100
+                section += f"💵 총 평가손익: *{total_pnl:+,.2f}* ({total_rate:+.1f}%)\n"
         else:
-            section += "⚠️ 보유 종목 조회 불가\n"
+            section += "📭 보유 종목 없음 (현금 100%)\n"
 
         return section
 

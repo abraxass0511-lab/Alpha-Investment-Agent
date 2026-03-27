@@ -61,6 +61,44 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/portfolio") {
+      try {
+        const authHeader = request.headers.get("Authorization") || "";
+        if (authHeader !== `Bearer ${env.WORKER_API_KEY || "alpha-internal"}`) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+        }
+
+        const holdings = await getBalance(env);
+        const bp = await getBuyingPower(env);
+
+        const result = {
+          holdings: [],
+          buying_power: bp ? (bp.ord_psbl_frcr_amt || "0") : "0",
+        };
+
+        if (holdings && holdings.length > 0) {
+          result.holdings = holdings
+            .filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0)
+            .map(h => ({
+              symbol: h.ovrs_pdno || "?",
+              qty: parseInt(h.ovrs_cblc_qty || "0"),
+              buy_avg: parseFloat(h.pchs_avg_pric || "0"),
+              current: parseFloat(h.now_pric2 || "0"),
+              pnl_rate: parseFloat(h.evlu_pfls_rt || "0"),
+              pnl_amt: parseFloat(h.frcr_evlu_pfls_amt || "0"),
+            }));
+        }
+
+        return new Response(JSON.stringify(result), {
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (request.method === "POST") {
       try {
         const update = await request.json();

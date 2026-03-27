@@ -195,17 +195,15 @@ def analyze_ticker_finnhub(row):
         "Reason": reason
     }
 
-import yfinance as yf
 
 def calculate_12_1_momentum(symbol):
     """
     Step 6: Calculate 12-1 Month Momentum
-    기본: FMP Historical Price / 백업: Yahoo Finance
+    FMP Historical Price 전용 (Yahoo 제거)
     Formula: (Price_{t-1} / Price_{t-12}) - 1
     """
     FMP_KEY = os.getenv("FMP_API_KEY")
-    
-    # === 1차 시도: FMP API (기본) ===
+
     if FMP_KEY:
         try:
             url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}?timeseries=252&apikey={FMP_KEY}"
@@ -218,22 +216,12 @@ def calculate_12_1_momentum(symbol):
                     price_t_minus_12 = prices[-1]['close']   # 약 12개월 전
                     momentum = (price_t_minus_1 / price_t_minus_12) - 1
                     return round(momentum, 4)
-            print(f"    ⚠️ FMP 6단계 {r.status_code} → Yahoo 백업 전환 ({symbol})")
+            print(f"    ⚠️ FMP 6단계 {r.status_code} ({symbol})")
         except Exception as e:
-            print(f"    ⚠️ FMP 6단계 에러({e}) → Yahoo 백업 전환 ({symbol})")
-    
-    # === 2차 시도: Yahoo Finance (백업) ===
-    try:
-        t = yf.Ticker(symbol)
-        hist = t.history(period="1y")
-        if len(hist) > 21:
-            price_t_minus_1 = hist['Close'].iloc[-21]
-            price_t_minus_12 = hist['Close'].iloc[0]
-            momentum = (price_t_minus_1 / price_t_minus_12) - 1
-            return round(momentum, 4)
-    except:
-        pass
+            print(f"    ⚠️ FMP 6단계 에러({e}) ({symbol})")
+
     return 0.0
+
 
 def run_sentiment_v2():
     scan_file = "output_reports/daily_scan_latest.csv"

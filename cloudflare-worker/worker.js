@@ -544,6 +544,35 @@ async function handleUpdate(update, env) {
     return;
   }
 
+  // Retry scan
+  if (text === "\uc2dc\ub3c4") {
+    if (!env.GITHUB_PAT) {
+      await sendMessage(env, "\u26a0\ufe0f GitHub \uc5f0\ub3d9\uc774 \uc124\uc815\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.", REPLY_KEYBOARD);
+      return;
+    }
+    const r = await fetch("https://api.github.com/repos/abraxass0511-lab/Alpha-Investment-Agent/actions/workflows/alpha_daily.yml/dispatches", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.GITHUB_PAT}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "Alpha-Bot",
+      },
+      body: JSON.stringify({ ref: "main" }),
+    });
+    if (r.ok || r.status === 204) {
+      await sendMessage(env, "\ud83d\udd04 *\uc2a4\uce94 \uc7ac\uc2dc\ub3c4 \uc2dc\uc791!*\n\n\uc57d 20~30\ubd84 \ud6c4 \uacb0\uacfc\ub97c \uc54c\ub824\ub4dc\ub9ac\uaca0\uc2b5\ub2c8\ub2e4, \ub300\ud45c\ub2d8.", REPLY_KEYBOARD);
+    } else {
+      await sendMessage(env, "\u26a0\ufe0f \uc7ac\uc2dc\ub3c4 \uc694\uccad \uc2e4\ud328 (HTTP " + r.status + ")", REPLY_KEYBOARD);
+    }
+    return;
+  }
+
+  // Skip today
+  if (text === "\uc885\ub8cc") {
+    await sendMessage(env, "\u2705 *\uc624\ub298 \uc2a4\uce94\uc744 \uac74\ub108\ub6f5\ub2c8\ub2e4.*\n\n\ub0b4\uc77c \uc815\uc0c1 \uc2e4\ud589\ub429\ub2c8\ub2e4, \ub300\ud45c\ub2d8.", REPLY_KEYBOARD);
+    return;
+  }
+
   if (["\uc2b9\uc778", "\ubc18\ub824"].includes(text)) {
     return;
   }

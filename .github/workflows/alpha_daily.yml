@@ -37,9 +37,11 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run Alpha Scanner (100% 될 때까지 재시도)
+      id: scanner
       run: |
         MAX_RETRIES=3
         RETRY=0
+        SCAN_SUCCESS=false
         while [ $RETRY -lt $MAX_RETRIES ]; do
           echo "🔄 스캔 시도 $((RETRY+1))/$MAX_RETRIES"
           python .agent/tools/alpha_scanner.py
@@ -49,6 +51,7 @@ jobs:
           
           if [ "$SUCCESS" = "True" ]; then
             echo "✅ 100% 수집 완료!"
+            SCAN_SUCCESS=true
             break
           fi
           
@@ -58,12 +61,20 @@ jobs:
             sleep 300
           fi
         done
+        echo "scan_success=$SCAN_SUCCESS" >> $GITHUB_OUTPUT
+
+    - name: Notify scan failure
+      if: steps.scanner.outputs.scan_success != 'true'
+      run: python .agent/tools/alpha_notify_failure.py
 
     - name: Run Alpha Sentiment
+      if: steps.scanner.outputs.scan_success == 'true'
       run: python .agent/tools/alpha_sentiment.py
 
     - name: Run Alpha Rebalancer
+      if: steps.scanner.outputs.scan_success == 'true'
       run: python .agent/tools/alpha_rebalancer.py
 
     - name: Run Alpha Messenger
+      if: steps.scanner.outputs.scan_success == 'true'
       run: python .agent/tools/alpha_messenger.py

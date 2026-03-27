@@ -305,6 +305,7 @@ def run_persistent_scan():
     with open("output_reports/metadata.json", "w") as f:
         json.dump({
             "total": total_count,
+            "yahoo_collected": len(results),
             "success_all": (len(results) == total_count),
             "step1": c1, "step2": c2, "step3": c3, "step4": c4,
             "timestamp": datetime.now().isoformat(),

@@ -89,7 +89,7 @@ def get_sp500_tickers():
 # 1단계: Yahoo에서 기본 데이터 수집 (Size + Price + MA50)
 # ============================================================
 def process_item(symbol):
-    """Yahoo Finance에서 기본 데이터 수집"""
+    """Yahoo Finance에서 기본 데이터 수집 (60초 타임아웃)"""
     try:
         t = yf.Ticker(symbol)
         info = t.info
@@ -97,7 +97,7 @@ def process_item(symbol):
         
         m_cap = info.get('marketCap', 0)
         
-        hist = t.history(period="100d")
+        hist = t.history(period="100d", timeout=30)
         if len(hist) < 50: return None
         
         close = hist['Close'].iloc[-1]
@@ -111,7 +111,7 @@ def process_item(symbol):
             'MA50': ma50,
             'Momentum(%)': round(((close - ma50) / ma50) * 100, 2)
         }
-    except:
+    except Exception:
         return None
 
 # ============================================================

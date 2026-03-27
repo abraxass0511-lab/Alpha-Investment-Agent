@@ -248,9 +248,12 @@ def run_sentiment_v2():
     # Finnhub API Rate Limit 방지를 위해 Worker 조절 (10명)
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(analyze_ticker_finnhub, row) for _, row in df.iterrows()]
-        for future in as_completed(futures):
-            res = future.result()
-            if res: sentiment_passed.append(res)
+        for future in as_completed(futures, timeout=600):  # 10min max
+            try:
+                res = future.result(timeout=60)
+                if res: sentiment_passed.append(res)
+            except Exception:
+                pass
 
     # 전체 센티먼트 결과 저장 (리밸런서가 보유종목 기준 0.4로 재검증할 때 사용)
     if sentiment_passed:

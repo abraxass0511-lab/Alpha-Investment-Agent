@@ -18,7 +18,7 @@ def send_telegram_message(text):
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}
-    requests.post(url, json=payload)
+    requests.post(url, json=payload, timeout=30)
 
 
 def get_portfolio_section():

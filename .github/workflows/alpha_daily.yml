@@ -38,7 +38,7 @@ jobs:
 
     - name: Run Alpha Scanner (100% 될 때까지 재시도)
       run: |
-        MAX_RETRIES=5
+        MAX_RETRIES=3
         RETRY=0
         while [ $RETRY -lt $MAX_RETRIES ]; do
           echo "🔄 스캔 시도 $((RETRY+1))/$MAX_RETRIES"
@@ -54,8 +54,8 @@ jobs:
           
           RETRY=$((RETRY+1))
           if [ $RETRY -lt $MAX_RETRIES ]; then
-            echo "⚠️ 누락 발생. 10분 후 재시도..."
-            sleep 600
+            echo "⚠️ 누락 발생. 5분 후 재시도..."
+            sleep 300
           fi
         done
 

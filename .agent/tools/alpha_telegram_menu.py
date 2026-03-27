@@ -357,17 +357,18 @@ TEXT_HANDLERS = {
 
 
 def process_updates():
-    """새 메시지를 확인하고 처리합니다. (최근 5분 이내 메시지만)"""
-    # offset 없이 최신 메시지 가져오기
-    updates = get_updates()
+    """새 메시지를 확인하고 처리합니다. (offset 기반 + 시간 필터)"""
+    # 저장된 offset 로드 → 이미 처리한 메시지는 건너뜀
+    offset = load_offset()
+    updates = get_updates(offset=offset if offset else None)
 
     if not updates:
         print("📭 새 메시지 없음.")
         return
 
-    # 현재 시간 기준 5분 이내 메시지만 처리
+    # 현재 시간 기준 35분 이내 메시지만 처리 (30분 간격 + 5분 버퍼)
     now = time.time()
-    cutoff = now - 300  # 5분 = 300초
+    cutoff = now - 2100  # 35분 = 2100초
 
     processed = 0
     for update in updates:
@@ -424,12 +425,13 @@ def process_updates():
                     print(f"⚠️ AI 에러: {e}")
                     send_message(f"⚠️ AI 답변 생성 에러: {e}", reply_markup=REPLY_KEYBOARD)
 
-    # 마지막 update_id+1로 offset 설정 (처리한 메시지를 다음에 안 받음)
+    # 마지막 update_id+1을 offset으로 저장 (다음 실행 시 중복 방지)
     if updates:
         last_id = updates[-1]["update_id"]
-        get_updates(offset=last_id + 1)  # offset 확인용 빈 호출
+        save_offset(last_id + 1)
+        print(f"💾 offset 저장: {last_id + 1}")
 
-    print(f"✅ 처리 완료: {processed}건 (전체 {len(updates)}건 중 최근 5분)")
+    print(f"✅ 처리 완료: {processed}건 (전체 {len(updates)}건 중 최근 35분)")
 
 
 if __name__ == "__main__":

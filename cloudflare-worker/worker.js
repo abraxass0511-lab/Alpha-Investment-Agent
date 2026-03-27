@@ -309,53 +309,58 @@ async function handleApproval(env) {
     }
 
     let msg = "\ud83c\udfaf *\uc2b9\uc778 \ucc98\ub9ac \uacb0\uacfc*\n\n";
+    let buyMsg = "";
+    let sellMsg = "";
 
-    // 매도 먼저 실행
+    // \ub9e4\ub3c4 \uba3c\uc800 \uc2e4\ud589 (\uc608\uc218\uae08 \ud655\ubcf4)
     if (sellStocks.length > 0) {
-      msg += "\ud83d\udd3b *\ub9e4\ub3c4:*\n";
+      sellMsg += "\ud83d\udd34 *\ub9e4\ub3c4:*\n";
       for (const s of sellStocks) {
         const ok = await sellOrder(env, s.symbol, s.qty, s.current);
-        msg += ok
+        sellMsg += ok
           ? `  \u2705 ${s.symbol} ${s.qty}\uc8fc \u00d7 $${s.current.toFixed(2)} \ub9e4\ub3c4 \uc644\ub8cc\n`
           : `  \u274c ${s.symbol} \ub9e4\ub3c4 \uc2e4\ud328\n`;
       }
-      msg += "\n";
+      sellMsg += "\n";
     }
 
-    // 매수 실행
+    // \ub9e4\uc218 \uc2e4\ud589
     if (buyStocks.length > 0) {
-      // 보유 종목 확인 (이미 보유 중이면 스킵)
       const holdings = await getBalance(env);
       const heldSymbols = (holdings || []).filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0).map(h => h.ovrs_pdno);
       buyStocks = buyStocks.filter(s => !heldSymbols.includes(s.symbol));
 
       if (buyStocks.length === 0) {
-        msg += "\u2139\ufe0f \ubaa8\ub4e0 \ucd94\ucc9c \uc885\ubaa9\uc744 \uc774\ubbf8 \ubcf4\uc720 \uc911\uc785\ub2c8\ub2e4.\n";
+        buyMsg += "\u2139\ufe0f \ubaa8\ub4e0 \ucd94\ucc9c \uc885\ubaa9\uc744 \uc774\ubbf8 \ubcf4\uc720 \uc911\uc785\ub2c8\ub2e4.\n\n";
       } else {
         const bp = await getBuyingPower(env);
         const cash = parseFloat(bp?.ord_psbl_frcr_amt || "0");
         const perStock = Math.floor(cash * 0.05 * 100) / 100;
 
         if (perStock < 10) {
-          msg += "\u26a0\ufe0f \ub9e4\uc218 \ubd88\uac00: \uc608\uc218\uae08 \ubd80\uc871 (\uc885\ubaa9\ub2f9 $" + perStock.toFixed(2) + ")\n";
+          buyMsg += "\u26a0\ufe0f \ub9e4\uc218 \ubd88\uac00: \uc608\uc218\uae08 \ubd80\uc871 (\uc885\ubaa9\ub2f9 $" + perStock.toFixed(2) + ")\n\n";
         } else {
-          msg += "\ud83d\udfe2 *\ub9e4\uc218:*\n";
-          msg += `  \ud83d\udcb0 \uc885\ubaa9\ub2f9 \ud22c\uc790\uae08: *$${perStock.toFixed(2)}* (\uc608\uc218\uae08 5%)\n\n`;
+          buyMsg += "\ud83d\udfe2 *\ub9e4\uc218:*\n";
+          buyMsg += `  \ud83d\udcb0 \uc885\ubaa9\ub2f9 \ud22c\uc790\uae08: *$${perStock.toFixed(2)}* (\uc608\uc218\uae08 5%)\n\n`;
           for (const s of buyStocks) {
             if (s.price <= 0) continue;
             const qty = Math.floor(perStock / s.price);
             if (qty <= 0) {
-              msg += `  \u26a0\ufe0f ${s.symbol}: \ub2e8\uac00 $${s.price.toFixed(2)} > \ud22c\uc790\uae08\n`;
+              buyMsg += `  \u26a0\ufe0f ${s.symbol}: \ub2e8\uac00 $${s.price.toFixed(2)} > \ud22c\uc790\uae08\n`;
               continue;
             }
             const ok = await buyOrder(env, s.symbol, qty, s.price.toFixed(2));
-            msg += ok
+            buyMsg += ok
               ? `  \u2705 ${s.symbol} ${qty}\uc8fc \u00d7 $${s.price.toFixed(2)} \ub9e4\uc218 \uc644\ub8cc\n`
               : `  \u274c ${s.symbol} \ub9e4\uc218 \uc2e4\ud328\n`;
           }
+          buyMsg += "\n";
         }
       }
     }
+
+    // \ud45c\uc2dc: \ub9e4\uc218 \uba3c\uc800, \ub9e4\ub3c4 \ub098\uc911\uc5d0
+    msg += buyMsg + sellMsg;
 
     return msg;
   } catch (e) {

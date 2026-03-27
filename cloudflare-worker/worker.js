@@ -152,7 +152,7 @@ async function getKisToken(env) {
   return _cachedToken;
 }
 
-async function getBalance(env) {
+async function getBalance(env, _retry = false) {
   const token = await getKisToken(env);
   if (!token) return null;
 
@@ -178,15 +178,15 @@ async function getBalance(env) {
 
   const data = await r.json();
   if (data.rt_cd === "0") return data.output1 || [];
-  // Token expired - clear cache and retry once
-  if (data.msg1 && data.msg1.includes("token")) {
+  // Token expired - clear cache and retry ONCE
+  if (!_retry && data.msg1 && data.msg1.includes("token")) {
     _cachedToken = null;
-    return getBalance(env);
+    return getBalance(env, true);
   }
   return null;
 }
 
-async function getBuyingPower(env) {
+async function getBuyingPower(env, _retry = false) {
   const token = await getKisToken(env);
   if (!token) return null;
 
@@ -216,9 +216,10 @@ async function getBuyingPower(env) {
       ord_psbl_frcr_amt: output.ord_psbl_frcr_amt || output.ovrs_ord_psbl_amt || "0",
     };
   }
-  if (data.msg1 && data.msg1.includes("token")) {
+  // Token expired - retry ONCE
+  if (!_retry && data.msg1 && data.msg1.includes("token")) {
     _cachedToken = null;
-    return getBuyingPower(env);
+    return getBuyingPower(env, true);
   }
   return null;
 }
@@ -420,7 +421,7 @@ async function handleTotalReturn(env) {
     const holdings = await getBalance(env);
     if (!holdings || holdings.length === 0) {
       const bp = await getBuyingPower(env);
-      const usd = bp ? bp.ord_psbl_frcr_amt : "N/A";
+      const usd = bp ? bp.ord_psbl_frcr_amt : "조회 실패";
       return "\ud83d\udcca *\uc804\uccb4 \uc218\uc775\ub960*\n\n\ud83d\udced \ud604\uc7ac \ubcf4\uc720 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.\n\ud83d\udcb0 \uc608\uc218\uae08: *$" + usd + "*\n\n\ud604\uae08 100% \uc0c1\ud0dc\uc785\ub2c8\ub2e4, \ub300\ud45c\ub2d8! \ud83d\udee1\ufe0f";
     }
 

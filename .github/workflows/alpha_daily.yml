@@ -38,6 +38,8 @@ jobs:
 
     - name: Run Alpha Scanner (100% 될 때까지 재시도)
       id: scanner
+      env:
+        PYTHONUNBUFFERED: "1"
       run: |
         MAX_RETRIES=3
         RETRY=0

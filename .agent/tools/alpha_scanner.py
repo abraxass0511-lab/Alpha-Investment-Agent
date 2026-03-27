@@ -193,6 +193,7 @@ def get_fmp_roe_screener():
 
     url = (f"https://financialmodelingprep.com/api/v3/stock-screener"
            f"?marketCapMoreThan=10000000000"
+           f"&returnOnEquityMoreThan=15"
            f"&isActivelyTrading=true"
            f"&limit=1000"
            f"&apikey={FMP_KEY}")

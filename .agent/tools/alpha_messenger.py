@@ -340,40 +340,7 @@ if __name__ == "__main__":
     # 미국 장 개장일 체크
     from us_market_calendar import is_trading_day
     if not is_trading_day():
-        print("📅 오늘은 미국 시장 휴장일입니다. 원칙적으로 리포트를 건너뜁니다.")
-        
-        # [테스트 기능] 이번 주말(3월 28일~29일)에는 대표님 요청에 따라 구글 1주 매수 승인 테스트용 가짜 보고서를 발송합니다.
-        now_str = datetime.now().strftime("%Y-%m-%d")
-        if now_str in ["2026-03-28", "2026-03-29"]:
-            print("🧪 [테스트] 주말 구글 1주 매수 예약 테스트용 모의 데이터를 주입합니다.")
-            if not os.path.exists("output_reports"):
-                os.makedirs("output_reports")
-                
-            # 1. 메타데이터 위조
-            with open("output_reports/metadata.json", "w", encoding="utf-8") as f:
-                json.dump({
-                    "success_all": True, 
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "total": 503, "step1": 503, "step2": 250, "step3": 120, "step4": 60, "step5": 10, "step6": 1
-                }, f)
-                
-            # 2. 구글 CSV 위조
-            df_test = pd.DataFrame({
-                "Symbol": ["GOOGL"], 
-                "Price": [170.0], 
-                "Name": ["Alphabet Inc. (구글)"], 
-                "Reason": ["시스템 예약매수 및 자동집행 완벽 검증 테스트 (대표님 요청)"], 
-                "Sentiment": [0.9]
-            })
-            df_test.to_csv("output_reports/final_picks_latest.csv", index=False)
-            
-            # 3. 리밸런싱 위조 (매도 없음)
-            with open("output_reports/rebalance_recommendations.json", "w", encoding="utf-8") as f:
-                json.dump({"sell": [], "buy": []}, f)
-            
-            # 발송!
-            report_daily_picks()
-        
+        print("📅 오늘은 미국 시장 휴장일입니다. 리포트를 건너뜁니다.")
         exit(0)
 
     report_daily_picks()

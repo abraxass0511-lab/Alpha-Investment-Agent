@@ -86,33 +86,120 @@ def get_sp500_tickers():
         return []
 
 # ============================================================
-# 1단계: Yahoo에서 기본 데이터 수집 (Size + Price + MA50)
+# 1단계: Yahoo 배치 다운로드 (yf.download)
+# ~100종목씩 5배치, 누락 검증 + 재시도
 # ============================================================
-def process_item(symbol):
-    """Yahoo Finance에서 기본 데이터 수집 (60초 타임아웃)"""
-    try:
-        t = yf.Ticker(symbol)
-        info = t.info
-        if not info or 'marketCap' not in info: return None
+def batch_download_yahoo(tickers):
+    """yf.download()로 100종목씩 배치 다운로드 + 누락 검증"""
+    BATCH_SIZE = 100
+    max_retries = 5
+    results = {}
+    
+    # 배치 분할
+    batches = [tickers[i:i+BATCH_SIZE] for i in range(0, len(tickers), BATCH_SIZE)]
+    print(f"📦 {len(batches)}개 배치로 분할 (배치당 ~{BATCH_SIZE}종목)")
+    
+    for batch_idx, batch in enumerate(batches):
+        if check_timeout(): break
+        print(f"\n🔄 배치 {batch_idx+1}/{len(batches)} ({len(batch)}종목) 다운로드 중...")
         
-        m_cap = info.get('marketCap', 0)
+        batch_results = {}
+        remaining = list(batch)
         
-        hist = t.history(period="100d", timeout=30)
-        if len(hist) < 50: return None
+        for attempt in range(1, max_retries + 1):
+            if check_timeout() or not remaining: break
+            
+            try:
+                # yf.download 배치 다운로드 (1년 데이터)
+                df = yf.download(
+                    remaining,
+                    period="100d",
+                    group_by="ticker",
+                    threads=True,
+                    timeout=60,
+                    progress=False,
+                )
+                
+                if df.empty:
+                    print(f"  ⚠️ 배치 {batch_idx+1} 시도 {attempt}: 빈 데이터 반환")
+                    time.sleep(5)
+                    continue
+                
+                # 단일 종목이면 구조가 다름
+                if len(remaining) == 1:
+                    sym = remaining[0]
+                    if 'Close' in df.columns and len(df) >= 50:
+                        close = df['Close'].iloc[-1]
+                        ma50 = df['Close'].rolling(50).mean().iloc[-1]
+                        if pd.notna(close) and pd.notna(ma50):
+                            batch_results[sym] = {
+                                'Symbol': sym, 'Price': round(float(close), 2),
+                                'MA50': float(ma50),
+                                'Momentum(%)': round(((float(close) - float(ma50)) / float(ma50)) * 100, 2)
+                            }
+                else:
+                    for sym in remaining:
+                        try:
+                            if sym not in df.columns.get_level_values(0):
+                                continue
+                            sym_df = df[sym]
+                            if 'Close' not in sym_df.columns or len(sym_df.dropna(subset=['Close'])) < 50:
+                                continue
+                            close_series = sym_df['Close'].dropna()
+                            if len(close_series) < 50:
+                                continue
+                            close = close_series.iloc[-1]
+                            ma50 = close_series.rolling(50).mean().iloc[-1]
+                            if pd.notna(close) and pd.notna(ma50):
+                                batch_results[sym] = {
+                                    'Symbol': sym, 'Price': round(float(close), 2),
+                                    'MA50': float(ma50),
+                                    'Momentum(%)': round(((float(close) - float(ma50)) / float(ma50)) * 100, 2)
+                                }
+                        except Exception:
+                            continue
+                
+            except Exception as e:
+                print(f"  ⚠️ 배치 {batch_idx+1} 시도 {attempt} 에러: {e}")
+                time.sleep(5)
+                continue
+            
+            # 누락 검증
+            remaining = [s for s in batch if s not in batch_results]
+            collected = len(batch_results)
+            print(f"  ✅ 시도 {attempt}: {collected}/{len(batch)} 수집 완료", end="")
+            
+            if remaining:
+                print(f" ({len(remaining)}개 누락 → 재시도)")
+                time.sleep(3)
+            else:
+                print(" (100% 완료!)")
+                break
         
-        close = hist['Close'].iloc[-1]
-        ma50 = hist['Close'].rolling(window=50).mean().iloc[-1]
-        
-        return {
-            'Symbol': symbol,
-            'Name': info.get('shortName', symbol),
-            'MarketCap': m_cap,
-            'Price': round(close, 2),
-            'MA50': ma50,
-            'Momentum(%)': round(((close - ma50) / ma50) * 100, 2)
-        }
-    except Exception:
-        return None
+        results.update(batch_results)
+        print(f"  📊 배치 {batch_idx+1} 최종: {len(batch_results)}/{len(batch)} 수집")
+    
+    # MarketCap + Name 보충 (배치에서 못 가져오는 info 데이터)
+    print(f"\n📋 MarketCap/Name 보충 중... ({len(results)}종목)")
+    info_batches = [list(results.keys())[i:i+50] for i in range(0, len(results), 50)]
+    
+    for ib_idx, ib in enumerate(info_batches):
+        if check_timeout(): break
+        for sym in ib:
+            try:
+                t = yf.Ticker(sym)
+                fast_info = t.fast_info
+                results[sym]['MarketCap'] = getattr(fast_info, 'market_cap', 0) or 0
+                results[sym]['Name'] = sym  # fast_info에 이름 없으면 심볼 사용
+                try:
+                    results[sym]['Name'] = t.info.get('shortName', sym)
+                except Exception:
+                    pass
+            except Exception:
+                results[sym]['MarketCap'] = 0
+                results[sym]['Name'] = sym
+    
+    return results
 
 # ============================================================
 # 3단계: FMP 전용 ROE 검증 (429 자동 재시도, Yahoo 백업 없음)
@@ -194,38 +281,9 @@ def run_persistent_scan():
     print(f"🚀 [Alpha Persistent Scanner] 전수 조사 시작 (대상: {total_count} 종목)")
     
     # ============================================================
-    # Yahoo 전수 조사 (1~2단계용 데이터 수집)
+    # Yahoo 배치 다운로드 (1~2단계용 데이터 수집)
     # ============================================================
-    results = {}
-    remaining_tickers = list(tickers)
-    max_yahoo_retries = 5  # max 5 retries (was 30)
-    
-    attempt = 1
-    while remaining_tickers:
-        if check_timeout(): break
-        print(f"🔄 시도 {attempt}: 남은 종목 {len(remaining_tickers)}개 스캔 중...")
-        
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future_to_symbol = {executor.submit(process_item, s): s for s in remaining_tickers}
-            for future in as_completed(future_to_symbol, timeout=300):  # 5min timeout per batch
-                symbol = future_to_symbol[future]
-                try:
-                    res = future.result(timeout=60)  # 1min per stock
-                    if res:
-                        results[symbol] = res
-                except Exception:
-                    pass
-        
-        remaining_tickers = [s for s in tickers if s not in results]
-        
-        if remaining_tickers:
-            coverage = len(results) / total_count * 100
-            print(f"⚠️ {len(remaining_tickers)}개 누락 (커버리지: {coverage:.0f}%). 대기 후 재시도...")
-            time.sleep(min(attempt * 3, 15))
-            attempt += 1
-            if attempt > max_yahoo_retries:
-                print(f"🚨 {max_yahoo_retries}회 시도 후 중단. (커버리지: {coverage:.0f}%)")
-                break
+    results = batch_download_yahoo(tickers)
 
     # ============================================================
     # [1단계] 체급 (Size) — Yahoo ✅

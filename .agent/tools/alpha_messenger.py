@@ -158,7 +158,7 @@ def report_daily_picks():
 
     # 2. 100% 성공 여부 확인 (절대 규칙: 누락 시 보내지 않고 재시도 대기)
     if not meta.get("success_all", False):
-        print("🚨 야후 데이터 100% 수집 실패. 리포트를 보내지 않습니다. 재시도를 대기합니다.")
+        print("🚨 데이터 수집 미완료. 리포트를 보내지 않습니다. 재시도를 대기합니다.")
         return
 
     days = ['월', '화', '수', '목', '금', '토', '일']
@@ -175,8 +175,8 @@ def report_daily_picks():
     summary_table = "\n*📊 필터 현황 요약 (통과 기준)*\n"
     summary_table += "| 구분 | 필터 항목 | 통과 수 | 통과 기준 | 소스 |\n"
     summary_table += "| :--- | :--- | :--- | :--- | :--- |\n"
-    summary_table += f"| **1단계** | **체급 (Size)** | {meta.get('step1', 0)}건 | 시총 *$10B+* | Yahoo |\n"
-    summary_table += f"| **2단계** | **에너지 (Momentum)** | {meta.get('step2', 0)}건 | 가격 *> 50MA* | Yahoo |\n"
+    summary_table += f"| **1단계** | **체급 (Size)** | {meta.get('step1', 0)}건 | 시총 *$10B+* | FMP |\n"
+    summary_table += f"| **2단계** | **에너지 (Momentum)** | {meta.get('step2', 0)}건 | 가격 *> 50MA* | FMP |\n"
     summary_table += f"| **3단계** | **내실 (Quality)** | {meta.get('step3', 0)}건 | ROE *15%+* | FMP |\n"
     summary_table += f"| **4단계** | **성장 (Growth)** | {meta.get('step4', 0)}건 | Surprise *10%* OR Growth *20%* | FMP |\n"
     summary_table += f"| **5단계** | **심리 (Sentiment)** | {meta.get('step5', 0)}건 | 점수 *0.7+* | Finnhub |\n"
@@ -305,11 +305,11 @@ def report_daily_picks():
 
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
     if meta.get("success_all", False):
-        footer = "📝 _비고 : 야후, FMP에서 모든 정보 받음_"
+        footer = "📝 _비고 : FMP에서 모든 정보 받음_"
     else:
         total = meta.get("total", 503)
         collected = meta.get("step1", 0) + (total - meta.get("step1", 0))  # 수집 시도 수
-        footer = f"📝 _비고 : ⚠️ 야후 데이터 일부 누락 발생 (수집 미완료)_"
+        footer = f"📝 _비고 : ⚠️ 데이터 일부 누락 발생 (수집 미완료)_"
 
     # 휴장 안내 (금요일 → 주말 안내, 공휴일 전날 → 공휴일 안내)
     try:

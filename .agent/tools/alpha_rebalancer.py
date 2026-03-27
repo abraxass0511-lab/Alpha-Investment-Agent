@@ -94,12 +94,37 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
         if sym in scan_data:
             row = scan_data[sym]
             # 스캔에 있으면 1~4단계 통과, 세부 기준 재확인
-            market_cap = float(row.get("MarketCap", "0"))
-            price = float(row.get("Price", "0"))
-            ma50 = float(row.get("MA50", "0"))
-            roe = float(row.get("ROE(%)", "0"))
+            # V3: MarketCap_M (백만달러 단위)
+            market_cap_m = 0
+            try:
+                market_cap_m = float(row.get("MarketCap_M", "0"))
+            except (ValueError, TypeError):
+                pass
 
-            if market_cap < 10_000_000_000:
+            price = 0
+            try:
+                price = float(row.get("Price", "0"))
+            except (ValueError, TypeError):
+                pass
+
+            ma50 = 0
+            try:
+                ma50 = float(row.get("MA50", "0"))
+            except (ValueError, TypeError):
+                pass
+
+            # ROE는 "Screener ✅" 문자열일 수 있음
+            roe = 0
+            try:
+                roe_val = row.get("ROE(%)", "0")
+                if isinstance(roe_val, str) and "Screener" in roe_val:
+                    roe = 99  # Screener 통과 = ROE 15%+ 확정
+                else:
+                    roe = float(roe_val)
+            except (ValueError, TypeError):
+                pass
+
+            if market_cap_m < 10_000:  # $10B = 10,000M
                 reasons.append("1단계(체급) 탈락: 시총 $10B 미만")
             if price < ma50 and ma50 > 0:
                 reasons.append(f"2단계(에너지) 탈락: 종가 ${price:.2f} < 50MA ${ma50:.2f}")

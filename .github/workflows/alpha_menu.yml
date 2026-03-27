@@ -2,8 +2,8 @@ name: Alpha Telegram Menu Bot
 
 on:
   schedule:
-    # 한국 시간 09:00~23:00 (UTC 00:00~14:00), 월~금, 5분 간격
-    - cron: '*/5 0-14 * * 1-5'
+    # 한국 시간 09:00~23:00 (UTC 00:00~14:00), 월~금, 30분 간격
+    - cron: '*/30 0-14 * * 1-5'
   workflow_dispatch:
 
 jobs:

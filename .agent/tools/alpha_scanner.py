@@ -180,24 +180,28 @@ def batch_download_yahoo(tickers):
         print(f"  📊 배치 {batch_idx+1} 최종: {len(batch_results)}/{len(batch)} 수집")
     
     # MarketCap + Name 보충 (배치에서 못 가져오는 info 데이터)
-    print(f"\n📋 MarketCap/Name 보충 중... ({len(results)}종목)")
-    info_batches = [list(results.keys())[i:i+50] for i in range(0, len(results), 50)]
+    print(f"\n📋 MarketCap/Name 보충 병렬 처리 중... ({len(results)}종목)")
     
-    for ib_idx, ib in enumerate(info_batches):
-        if check_timeout(): break
-        for sym in ib:
+    def fetch_info(sym):
+        try:
+            t = yf.Ticker(sym)
+            cap = getattr(t.fast_info, 'market_cap', 0) or 0
+            name = sym
             try:
-                t = yf.Ticker(sym)
-                fast_info = t.fast_info
-                results[sym]['MarketCap'] = getattr(fast_info, 'market_cap', 0) or 0
-                results[sym]['Name'] = sym  # fast_info에 이름 없으면 심볼 사용
-                try:
-                    results[sym]['Name'] = t.info.get('shortName', sym)
-                except Exception:
-                    pass
+                name = t.info.get('shortName', sym)
             except Exception:
-                results[sym]['MarketCap'] = 0
-                results[sym]['Name'] = sym
+                pass
+            return sym, cap, name
+        except Exception:
+            return sym, 0, sym
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_sym = {executor.submit(fetch_info, sym): sym for sym in results.keys()}
+        for future in as_completed(future_to_sym):
+            if check_timeout(): break
+            sym, cap, name = future.result()
+            results[sym]['MarketCap'] = cap
+            results[sym]['Name'] = name
     
     return results
 

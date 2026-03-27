@@ -238,6 +238,135 @@ async function sellOrder(env, symbol, qty, price) {
   return data.rt_cd === "0";
 }
 
+async function buyOrder(env, symbol, qty, price) {
+  const token = await getKisToken(env);
+  if (!token) return false;
+
+  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/order`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      appkey: env.KIS_APP_KEY,
+      appsecret: env.KIS_SECRET_KEY,
+      "tr_id": "VTTT1002U",
+    },
+    body: JSON.stringify({
+      CANO: env.KIS_CANO,
+      ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+      OVRS_EXCG_CD: "NASD",
+      PDNO: symbol,
+      ORD_QTY: String(qty),
+      OVRS_ORD_UNPR: String(price),
+      ORD_SVR_DVSN_CD: "0",
+      ORD_DVSN: "00",
+    }),
+  });
+
+  const data = await r.json();
+  return data.rt_cd === "0";
+}
+
+async function handleApproval(env) {
+  try {
+    // 1. GitHub에서 최종 추천 종목 조회
+    const ts = Date.now();
+    const picksUrl = `https://raw.githubusercontent.com/abraxass0511-lab/Alpha-Investment-Agent/main/output_reports/final_picks_latest.csv?t=${ts}`;
+    const rebalUrl = `https://raw.githubusercontent.com/abraxass0511-lab/Alpha-Investment-Agent/main/output_reports/rebalance_recommendations.json?t=${ts}`;
+
+    // 매수 후보 파싱 (final_picks CSV)
+    let buyStocks = [];
+    const picksResp = await fetch(picksUrl);
+    if (picksResp.ok) {
+      const csv = await picksResp.text();
+      const lines = csv.trim().split("\n");
+      if (lines.length > 1) {
+        const h = lines[0].split(",");
+        const si = h.indexOf("Symbol");
+        const pi = h.indexOf("Price");
+        for (let i = 1; i < lines.length; i++) {
+          const c = lines[i].split(",");
+          if (si >= 0 && c[si]) {
+            buyStocks.push({ symbol: c[si].trim(), price: parseFloat(c[pi] || "0") });
+          }
+        }
+      }
+    }
+
+    // 매도 후보 파싱 (rebalancer JSON)
+    let sellStocks = [];
+    const rebalResp = await fetch(rebalUrl);
+    if (rebalResp.ok) {
+      const rebal = await rebalResp.json();
+      sellStocks = (rebal.sell || []).map((s) => ({
+        symbol: s.symbol, qty: s.qty, current: s.current,
+      }));
+    }
+
+    if (buyStocks.length === 0 && sellStocks.length === 0) {
+      return "\ud83d\udced *\ucd94\ucc9c \uc885\ubaa9 \uc5c6\uc74c*\n\n\uc624\ub298 \ub9ac\ud3ec\ud2b8\uc5d0\uc11c \ub9e4\uc218/\ub9e4\ub3c4 \ucd94\ucc9c\uc774 \uc5c6\uc5c8\uc2b5\ub2c8\ub2e4.";
+    }
+
+    let msg = "\ud83c\udfaf *\uc2b9\uc778 \ucc98\ub9ac \uacb0\uacfc*\n\n";
+
+    // 매도 먼저 실행
+    if (sellStocks.length > 0) {
+      msg += "\ud83d\udd3b *\ub9e4\ub3c4:*\n";
+      for (const s of sellStocks) {
+        const ok = await sellOrder(env, s.symbol, s.qty, s.current);
+        msg += ok
+          ? `  \u2705 ${s.symbol} ${s.qty}\uc8fc \u00d7 $${s.current.toFixed(2)} \ub9e4\ub3c4 \uc644\ub8cc\n`
+          : `  \u274c ${s.symbol} \ub9e4\ub3c4 \uc2e4\ud328\n`;
+      }
+      msg += "\n";
+    }
+
+    // 매수 실행
+    if (buyStocks.length > 0) {
+      // 보유 종목 확인 (이미 보유 중이면 스킵)
+      const holdings = await getBalance(env);
+      const heldSymbols = (holdings || []).filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0).map(h => h.ovrs_pdno);
+      buyStocks = buyStocks.filter(s => !heldSymbols.includes(s.symbol));
+
+      if (buyStocks.length === 0) {
+        msg += "\u2139\ufe0f \ubaa8\ub4e0 \ucd94\ucc9c \uc885\ubaa9\uc744 \uc774\ubbf8 \ubcf4\uc720 \uc911\uc785\ub2c8\ub2e4.\n";
+      } else {
+        const bp = await getBuyingPower(env);
+        const cash = parseFloat(bp?.ord_psbl_frcr_amt || "0");
+        const perStock = Math.floor(cash * 0.05 * 100) / 100;
+
+        if (perStock < 10) {
+          msg += "\u26a0\ufe0f \ub9e4\uc218 \ubd88\uac00: \uc608\uc218\uae08 \ubd80\uc871 (\uc885\ubaa9\ub2f9 $" + perStock.toFixed(2) + ")\n";
+        } else {
+          msg += "\ud83d\udfe2 *\ub9e4\uc218:*\n";
+          msg += `  \ud83d\udcb0 \uc885\ubaa9\ub2f9 \ud22c\uc790\uae08: *$${perStock.toFixed(2)}* (\uc608\uc218\uae08 5%)\n\n`;
+          for (const s of buyStocks) {
+            if (s.price <= 0) continue;
+            const qty = Math.floor(perStock / s.price);
+            if (qty <= 0) {
+              msg += `  \u26a0\ufe0f ${s.symbol}: \ub2e8\uac00 $${s.price.toFixed(2)} > \ud22c\uc790\uae08\n`;
+              continue;
+            }
+            const ok = await buyOrder(env, s.symbol, qty, s.price.toFixed(2));
+            msg += ok
+              ? `  \u2705 ${s.symbol} ${qty}\uc8fc \u00d7 $${s.price.toFixed(2)} \ub9e4\uc218 \uc644\ub8cc\n`
+              : `  \u274c ${s.symbol} \ub9e4\uc218 \uc2e4\ud328\n`;
+          }
+        }
+      }
+    }
+
+    return msg;
+  } catch (e) {
+    return "\u26a0\ufe0f \uc2b9\uc778 \ucc98\ub9ac \uc5d0\ub7ec: " + e.message;
+  }
+}
+
+async function handleReject(env) {
+  return "\ud83d\udee1\ufe0f *\ubc18\ub824 \ucc98\ub9ac \uc644\ub8cc*\n\n\ud604\uc7ac \ud3ec\ud2b8\ud3f4\ub9ac\uc624\ub97c \uc720\uc9c0\ud569\ub2c8\ub2e4, \ub300\ud45c\ub2d8.";
+}
+
 // === Menu Handlers ===
 async function handleTotalReturn(env) {
   try {
@@ -573,7 +702,15 @@ async function handleUpdate(update, env) {
     return;
   }
 
-  if (["\uc2b9\uc778", "\ubc18\ub824"].includes(text)) {
+  if (text === "\uc2b9\uc778") {
+    const response = await handleApproval(env);
+    await sendMessage(env, response, REPLY_KEYBOARD);
+    return;
+  }
+
+  if (text === "\ubc18\ub824") {
+    const response = await handleReject(env);
+    await sendMessage(env, response, REPLY_KEYBOARD);
     return;
   }
 

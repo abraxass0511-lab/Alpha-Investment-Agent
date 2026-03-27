@@ -75,17 +75,29 @@ export default {
   // Cron Trigger: market open (23:30 KST)
   async scheduled(event, env, ctx) {
     try {
-      const pending = await env.KV.get("pending_sell");
-      if (!pending) return;
+      // 1. 긴급 전량 매도 예약 실행
+      const sellPend = await env.KV.get("pending_sell");
+      if (sellPend) {
+        const data = JSON.parse(sellPend);
+        if (data.type === "sell_all") {
+          const result = await executeEmergencySell(env);
+          await sendMessage(env, "⏰ *[예약 매도 실행]*\n\n" + result, REPLY_KEYBOARD);
+          await env.KV.delete("pending_sell");
+        }
+      }
 
-      const data = JSON.parse(pending);
-      if (data.type === "sell_all") {
-        const result = await executeEmergencySell(env);
-        await sendMessage(env, "\u23f0 *[\uc608\uc57d \ub9e4\ub3c4 \uc2e4\ud589]*\n\n" + result, REPLY_KEYBOARD);
-        await env.KV.delete("pending_sell");
+      // 2. 포트폴리오 승인 매수/매도 예약 실행
+      const appPend = await env.KV.get("pending_approval");
+      if (appPend) {
+        const data = JSON.parse(appPend);
+        if (data.type === "approval") {
+          const result = await executeApproval(env);
+          await sendMessage(env, "⏰ *[예약 승인(매수/매도) 자동 집행]*\n\n" + result, REPLY_KEYBOARD);
+          await env.KV.delete("pending_approval");
+        }
       }
     } catch (e) {
-      await sendMessage(env, "\u26a0\ufe0f \uc608\uc57d \ub9e4\ub3c4 \uc2e4\ud589 \uc911 \uc5d0\ub7ec: " + e.message, REPLY_KEYBOARD);
+      await sendMessage(env, "⚠️ 예약 실행 중 에러: " + e.message, REPLY_KEYBOARD);
     }
   }
 };
@@ -268,7 +280,7 @@ async function buyOrder(env, symbol, qty, price) {
   return data.rt_cd === "0";
 }
 
-async function handleApproval(env) {
+async function executeApproval(env) {
   try {
     // 1. GitHub에서 최종 추천 종목 조회
     const ts = Date.now();
@@ -368,8 +380,29 @@ async function handleApproval(env) {
   }
 }
 
+async function handleApproval(env) {
+  if (isMarketOpen()) {
+    // Market open -> execute immediately
+    return await executeApproval(env);
+  } else {
+    // Market closed -> save reservation to KV
+    if (env.KV) {
+      await env.KV.put("pending_approval", JSON.stringify({
+        type: "approval",
+        requested_at: new Date().toISOString(),
+      }));
+      return "✅ *승인 예약 완료!*\n\n" +
+        "🕒 미국 장 개장(23:30 KST) 시 자동 매수/매도를 실행합니다.\n" +
+        "📥 결과는 텔레그램으로 알려드리겠습니다, 대표님.\n\n" +
+        "취소하려면 \"예약취소\" 라고 입력해 주세요.";
+    } else {
+      return "⚠️ KV 저장소가 연결되지 않았습니다.";
+    }
+  }
+}
+
 async function handleReject(env) {
-  return "\ud83d\udee1\ufe0f *\ubc18\ub824 \ucc98\ub9ac \uc644\ub8cc*\n\n\ud604\uc7ac \ud3ec\ud2b8\ud3f4\ub9ac\uc624\ub97c \uc720\uc9c0\ud569\ub2c8\ub2e4, \ub300\ud45c\ub2d8.";
+  return "🛡️ *반려 처리 완료*\n\n현재 포트폴리오를 유지합니다, 대표님.";
 }
 
 // === Menu Handlers ===
@@ -560,10 +593,18 @@ async function handleSellConfirm(env) {
 
 async function handleCancelReservation(env) {
   if (env.KV) {
-    await env.KV.delete("pending_sell");
-    return "\u274c *\ub9e4\ub3c4 \uc608\uc57d\uc774 \ucde8\uc18c\ub418\uc5c8\uc2b5\ub2c8\ub2e4.*\n\n\ud83d\udee1\ufe0f \ud604\uc7ac \ubcf4\uc720 \uc885\ubaa9\uc744 \uc720\uc9c0\ud569\ub2c8\ub2e4, \ub300\ud45c\ub2d8.";
+    let cancelled = false;
+    const p1 = await env.KV.get("pending_sell");
+    if (p1) { await env.KV.delete("pending_sell"); cancelled = true; }
+    
+    const p2 = await env.KV.get("pending_approval");
+    if (p2) { await env.KV.delete("pending_approval"); cancelled = true; }
+    
+    if (cancelled) {
+      return "❌ *예약이 정상적으로 취소되었습니다.*\n\n🛡️ 예약된 주문이 제거되었으며, 현재 포트폴리오를 유지합니다, 대표님.";
+    }
   }
-  return "\u26a0\ufe0f \ucde8\uc18c\ud560 \uc608\uc57d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.";
+  return "⚠️ 취소할 예약(승인 대기 건 또는 매도 대기 건)이 없습니다.";
 }
 
 async function executeEmergencySell(env) {

@@ -26,7 +26,7 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 *   **뉴스 품질 필터**: Finnhub을 통해 **Reuters, Bloomberg, CNBC** 등 공신력 있는 경제 매체의 최신 24시간 이내 기사(5~10개)만 골라 심리 점수를 산출합니다.
 
 ### **자동 리포팅 & 스케줄링**
-*   **GitHub Actions**: 매일 오전 9시(KST) 자동으로 깨어나 스캔을 수행하고 텔레그램 리포트를 전송합니다.
+*   **이중 트리거 체계**: Google Apps Script(주 트리거)가 매일 오전 6시(KST) 미국장 마감 직후 정시에 워크플로우를 실행합니다. GitHub Actions cron은 백업으로 유지됩니다.
 *   **보고서 표준**: 100% 성공 시에만 전송하며 하단에 **"비고 : 야후, FMP에서 모든 정보 받음"**을 명시합니다.
 
 ### **매매 집행 원칙 (Execution Policy)**

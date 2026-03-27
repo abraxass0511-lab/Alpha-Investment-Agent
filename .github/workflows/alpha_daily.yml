@@ -2,7 +2,7 @@ name: Alpha Daily Investment Report
 
 on:
   schedule:
-    - cron: '0 0 * * 1-5' # 월~금 한국 시간 오전 9시 (00:00 UTC)
+    - cron: '0 21 * * 1-5' # 미국장 마감 후 한국 시간 오전 6시 (21:00 UTC, 백업용 - 주 트리거는 Google Apps Script)
   workflow_dispatch: # 수동 실행 가능
 
 jobs:

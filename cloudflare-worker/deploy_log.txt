@@ -1,0 +1,8 @@
+﻿
+ ?낉툘 wrangler 4.78.0
+???????????????????
+Total Upload: 30.90 KiB / gzip: 7.34 KiB
+Your Worker has access to the following bindings:
+Binding                                        Resource          
+env.KV (4f92a4f87a04420e93e88b2bc8d5ff33)      KV Namespace      
+

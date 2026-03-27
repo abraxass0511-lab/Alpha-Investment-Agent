@@ -11,8 +11,8 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 
 | 단계 | 미션 (Mission) | 상세 통과 기준 (Pass Criteria) | 데이터 소스 (Source) |
 | :--- | :--- | :--- | :--- |
-| **1단계** | **체급 (Size)** | **시가총액 $10B 이상** | KIS API (ustm_mcap) |
-| **2단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | KIS API (기간별시세) |
+| **1단계** | **체급 (Size)** | **시가총액 $10B 이상** | FMP 배치 시세 (marketCap) |
+| **2단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | FMP 배치 시세 (priceAvg50) |
 | **3단계** | **내실 (Quality)** | **ROE 15% 이상** | FMP Screener + 개별 검증 |
 | **4단계** | **성장 (Growth)** | **Surprise > 10% OR Growth > 20%** | FMP API |
 | **5단계** | **심리 (Sentiment)** | **AI 심리 점수 0.7 이상** | Finnhub & AI |
@@ -21,15 +21,15 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 ## 📊 Operational Strategy
 
 ### **데이터 무결성 (Data Integrity)**
-*   **KIS+FMP 하이브리드 엔진**: Yahoo Finance 의존성을 완전 제거하고, KIS API(무제한)로 1~2단계를 처리, FMP Screener 하이브리드로 3단계를 처리하여 **안정성과 정확도를 극대화**합니다.
-*   **KIS 토큰 자동 관리**: 6시간 TTL 기반 자동 갱신으로 토큰 만료 없이 운영합니다.
-*   **FMP API 다이어트**: Screener 1콜 + 개별 검증으로 일일 250콜 무료 한도 내에서 전 파이프라인을 운영합니다.
+*   **FMP 전용 엔진 V3**: Yahoo/KIS 의존성을 데이터 수집에서 완전 제거하고, FMP 배치 시세(1+2단계) + Screener 하이브리드(3단계)로 **안정성과 정확도를 극대화**합니다.
+*   **배치 누락 복구**: 배치 응답에서 누락된 종목은 **2회 개별 재시도** 후에만 탈락 처리합니다.
+*   **FMP 쿼터 실시간 추적**: 매 호출마다 남은 쿼터(250콜/일)를 확인하고, 위험 시 경고합니다.
 *   **뉴스 품질 필터**: Finnhub을 통해 **Reuters, Bloomberg, CNBC** 등 공신력 있는 경제 매체의 최신 24시간 이내 기사(5~10개)만 골라 심리 점수를 산출합니다.
 
 
 ### **자동 리포팅 & 스케줄링**
 *   **이중 트리거 체계**: Google Apps Script(주 트리거)가 매일 오전 6시(KST) 미국장 마감 직후 정시에 워크플로우를 실행합니다. GitHub Actions cron은 백업으로 유지됩니다.
-*   **보고서 표준**: 100% 성공 시에만 전송하며 하단에 **\"비고 : KIS, FMP에서 모든 정보 받음\"**을 명시합니다.
+*   **보고서 표준**: 100% 성공 시에만 전송하며 하단에 **"비고 : FMP에서 모든 정보 받음"**을 명시합니다.
 
 ### **매매 집행 원칙 (Execution Policy)**
 *   **매수 (Buy)**: 오전 리포트 보고 후 대표님 **"승인"** 메시지 수신 시에만 매수 큐(Queue)에 등록 후 장 개장 시 자동 매수 시도.

@@ -1,15 +1,14 @@
 """
-Alpha Scanner V2 — Yahoo-Free, KIS + FMP Hybrid Engine
+Alpha Scanner V3 — FMP 전용 엔진 (Yahoo/KIS 제거)
 
 파이프라인:
   Wikipedia → S&P 500 목록
-  KIS 현재가상세 → 1단계: 시총 $10B+ (ustm_mcap ≥ 10000)
-  KIS 기간별시세 → 2단계: 현재가 > 50일 이동평균
-  FMP Screener + 개별 검증 → 3단계: ROE 15%+
-  FMP 개별 → 4단계: 성장 (Surprise/EPS Growth)
+  FMP 배치 시세 → 1단계(시총 $10B+) + 2단계(가격 > 50MA) 동시
+  FMP Screener + 개별 검증 → 3단계(ROE 15%+)
+  FMP 개별 → 4단계(Growth)
 
-Yahoo Finance 의존성 완전 제거.
-KIS API는 무제한, FMP는 250콜/일 내에서 해결.
+KIS는 매매 전용(Cloudflare Worker)으로만 사용.
+FMP 무료 250콜/일 내 전 파이프라인 운영.
 """
 
 import os
@@ -23,16 +22,17 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 # ============================================================
-# Global Config
+# Config
 # ============================================================
-SCAN_TIMEOUT = 90 * 60  # 90 minutes
+SCAN_TIMEOUT = 90 * 60  # 90분
 SCAN_START = time.time()
 
 load_dotenv()
 FMP_KEY = os.getenv("FMP_API_KEY")
-fmp_call_count = 0
 
-KIS_RATE_DELAY = 0.5  # KIS API 호출 간격 (초)
+# FMP 쿼터 추적
+FMP_DAILY_LIMIT = 250
+fmp_call_count = 0
 
 
 def check_timeout():
@@ -43,65 +43,47 @@ def check_timeout():
     return False
 
 
+def fmp_quota_check():
+    """FMP 남은 쿼터 확인 및 경고"""
+    remaining = FMP_DAILY_LIMIT - fmp_call_count
+    if remaining <= 20:
+        print(f"    🚨 FMP 쿼터 위험! 남은 콜: {remaining}/{FMP_DAILY_LIMIT}")
+    return remaining
+
+
 # ============================================================
-# KIS Token Manager (자동 갱신, 6시간 TTL)
+# FMP API 호출 (쿼터 추적 + 429 재시도)
 # ============================================================
-class KisTokenManager:
-    """KIS API 토큰을 자동 관리합니다. 6시간마다 자동 재발급."""
+def fmp_request(url, timeout=15, max_retries=3):
+    """FMP API 호출 — 쿼터 추적, 429 재시도, 남은 콜 경고"""
+    global fmp_call_count
 
-    def __init__(self):
-        self.base_url = os.getenv("KIS_BASE_URL", "")
-        self.app_key = os.getenv("KIS_APP_KEY", "")
-        self.app_secret = os.getenv("KIS_SECRET_KEY", "")
-        self._token = None
-        self._issued_at = 0
-        self._ttl = 6 * 3600 - 300  # 5시간 55분 (5분 여유)
-
-    def get_token(self):
-        """토큰을 반환합니다. 만료 전이면 캐시된 토큰, 아니면 새로 발급."""
-        now = time.time()
-        if self._token and (now - self._issued_at) < self._ttl:
-            return self._token
-
-        print("   🔑 KIS 토큰 발급 중...")
-        url = f"{self.base_url}/oauth2/tokenP"
+    for attempt in range(max_retries):
+        if check_timeout():
+            return None
+        if fmp_quota_check() <= 0:
+            print("    🚨 FMP 일일 쿼터 소진! 중단합니다.")
+            return None
         try:
-            r = requests.post(url, json={
-                "grant_type": "client_credentials",
-                "appkey": self.app_key,
-                "appsecret": self.app_secret,
-            }, timeout=10)
+            fmp_call_count += 1
+            r = requests.get(url, timeout=timeout)
             if r.status_code == 200:
-                data = r.json()
-                self._token = data.get("access_token")
-                self._issued_at = now
-                print("   🔑 KIS 토큰 발급 완료 ✅")
-                return self._token
-            else:
-                print(f"   ❌ KIS 토큰 발급 실패: HTTP {r.status_code}")
+                return r
+            if r.status_code == 429:
+                wait = min(30 * (attempt + 1), 60)
+                print(f"    ⏳ FMP 429 (시도 {attempt+1}/{max_retries}) → {wait}초 대기...")
+                time.sleep(wait)
+                continue
+            print(f"    ⚠️ FMP HTTP {r.status_code}")
+            time.sleep(10)
         except Exception as e:
-            print(f"   ❌ KIS 토큰 발급 에러: {e}")
-        return None
-
-    def headers(self, tr_id):
-        """KIS API 요청 헤더를 생성합니다."""
-        token = self.get_token()
-        if not token:
-            return {}
-        return {
-            "Content-Type": "application/json; charset=utf-8",
-            "authorization": f"Bearer {token}",
-            "appkey": self.app_key,
-            "appsecret": self.app_secret,
-            "tr_id": tr_id,
-        }
-
-
-kis = KisTokenManager()
+            print(f"    ⚠️ FMP 에러({e})")
+            time.sleep(5)
+    return None
 
 
 # ============================================================
-# S&P 500 목록 — Wikipedia
+# S&P 500 목록 — Wikipedia (무료, API 콜 0)
 # ============================================================
 def get_sp500_tickers():
     """위키피디아에서 S&P 500 구성종목과 회사명을 가져옵니다."""
@@ -125,114 +107,87 @@ def get_sp500_tickers():
 
 
 # ============================================================
-# KIS API: 해외주식 현재가 상세 (1단계: 시총 + 가격)
+# 1+2단계: FMP 배치 시세 (price, priceAvg50, marketCap)
 # ============================================================
-EXCHANGES = ["NAS", "NYS", "AMS"]  # NASDAQ, NYSE, AMEX
-
-
-def kis_get_price_detail(symbol):
+def fmp_batch_quote(symbols):
     """
-    KIS 해외주식 현재가 상세 API (tr_id: HHDFS76200200)
-    → 현재가(last) + 시가총액(ustm_mcap, 백만$ 단위)
-    여러 거래소를 순차 시도하여 데이터를 찾습니다.
+    FMP 배치 시세 API — 최대 100종목씩 묶어서 1콜
+    반환: {symbol: {price, priceAvg50, marketCap}} dict
     """
-    for excd in EXCHANGES:
-        try:
-            url = f"{kis.base_url}/uapi/overseas-price/v1/quotations/price"
-            params = {"AUTH": "", "EXCD": excd, "SYMB": symbol}
-            r = requests.get(url, headers=kis.headers("HHDFS76200200"),
-                             params=params, timeout=10)
-            if r.status_code == 200:
-                data = r.json()
-                if data.get("rt_cd") == "0":
-                    out = data.get("output", {})
-                    price = float(out.get("last", 0) or out.get("base", 0) or 0)
-                    mcap_str = out.get("tomv", "") or out.get("ustm_mcap", "") or "0"
-                    mcap = float(mcap_str) if mcap_str else 0
-                    if price > 0:
-                        return {"price": price, "mcap_m": mcap, "excd": excd}
-            time.sleep(0.1)
-        except Exception:
-            continue
-    return None
+    result = {}
+    batch_size = 100
 
-
-# ============================================================
-# KIS API: 해외주식 기간별시세 (2단계: MA50 계산)
-# ============================================================
-def kis_get_daily_prices(symbol, excd="NAS"):
-    """
-    KIS 해외주식 기간별시세 API (tr_id: FHKST03030100)
-    → 일별 종가 리스트 반환 (최근순)
-    """
-    try:
-        url = f"{kis.base_url}/uapi/overseas-price/v1/quotations/dailyprice"
-        params = {
-            "AUTH": "",
-            "EXCD": excd,
-            "SYMB": symbol,
-            "GUBN": "0",  # 0=일별
-            "BYMD": datetime.now().strftime("%Y%m%d"),
-            "MODP": "1",  # 수정주가
-        }
-        r = requests.get(url, headers=kis.headers("FHKST03030100"),
-                         params=params, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("rt_cd") == "0":
-                output2 = data.get("output2", [])
-                closes = []
-                for item in output2:
-                    c = float(item.get("clos", 0))
-                    if c > 0:
-                        closes.append(c)
-                return closes
-    except Exception:
-        pass
-    return []
-
-
-def calculate_ma50(closes):
-    """종가 리스트에서 50일 이동평균을 계산합니다."""
-    if len(closes) >= 50:
-        return round(sum(closes[:50]) / 50, 2)
-    return None
-
-
-# ============================================================
-# FMP API 호출 (429 자동 재시도 + 카운터)
-# ============================================================
-def fmp_request(url, timeout=15):
-    """FMP API 호출 — 429 에러 시 최대 3회 재시도"""
-    global fmp_call_count
-    max_retries = 3
-
-    for attempt in range(max_retries):
+    for i in range(0, len(symbols), batch_size):
         if check_timeout():
-            return None
-        try:
-            fmp_call_count += 1
-            r = requests.get(url, timeout=timeout)
-            if r.status_code == 200:
-                return r
-            if r.status_code == 429:
-                wait = min(30 * (attempt + 1), 60)
-                print(f"    ⏳ FMP 429 (시도 {attempt+1}/{max_retries}) → {wait}초 대기...")
-                time.sleep(wait)
-                continue
-            print(f"    ⚠️ FMP HTTP {r.status_code} → 15초 대기...")
-            time.sleep(15)
-        except Exception as e:
-            print(f"    ⚠️ FMP 에러({e}) → 10초 대기...")
-            time.sleep(10)
-    return None
+            break
+
+        batch = symbols[i:i + batch_size]
+        symbols_str = ",".join(batch)
+        url = f"https://financialmodelingprep.com/api/v3/quote/{symbols_str}?apikey={FMP_KEY}"
+
+        r = fmp_request(url, timeout=30)
+        if r and r.status_code == 200:
+            data = r.json()
+            if isinstance(data, list):
+                for item in data:
+                    sym = item.get("symbol", "")
+                    if sym:
+                        result[sym] = {
+                            "price": item.get("price", 0) or 0,
+                            "priceAvg50": item.get("priceAvg50", 0) or 0,
+                            "marketCap": item.get("marketCap", 0) or 0,
+                            "name": item.get("name", sym),
+                        }
+
+        batch_num = i // batch_size + 1
+        total_batches = (len(symbols) + batch_size - 1) // batch_size
+        print(f"   📡 배치 {batch_num}/{total_batches}: {len(batch)}종목 요청 → {len(data) if r else 0}건 수신")
+        time.sleep(1)
+
+    return result
+
+
+def recover_missing(symbols, quote_data, name_map):
+    """
+    배치 응답에서 누락된 종목을 개별 재요청 (최대 2회 시도)
+    """
+    missing = [s for s in symbols if s not in quote_data]
+    if not missing:
+        return quote_data
+
+    print(f"   🔍 누락 {len(missing)}종목 개별 복구 시도...")
+
+    for sym in missing:
+        recovered = False
+        for attempt in range(2):  # 최대 2회 시도
+            url = f"https://financialmodelingprep.com/api/v3/quote/{sym}?apikey={FMP_KEY}"
+            r = fmp_request(url, timeout=10)
+            if r and r.status_code == 200:
+                data = r.json()
+                if isinstance(data, list) and len(data) > 0:
+                    item = data[0]
+                    quote_data[sym] = {
+                        "price": item.get("price", 0) or 0,
+                        "priceAvg50": item.get("priceAvg50", 0) or 0,
+                        "marketCap": item.get("marketCap", 0) or 0,
+                        "name": item.get("name", sym),
+                    }
+                    print(f"    ✅ {sym} 복구 성공 (시도 {attempt+1})")
+                    recovered = True
+                    break
+            time.sleep(3)
+
+        if not recovered:
+            print(f"    ❌ {sym} 복구 실패 (2회 시도 후 탈락)")
+
+    return quote_data
 
 
 # ============================================================
 # 3단계: FMP Screener + 하이브리드 개별 검증
 # ============================================================
 def get_fmp_roe_screener():
-    """FMP Stock Screener 1콜 → ROE 15%+ 종목 세트 반환"""
+    """FMP Stock Screener 1콜 → ROE 15%+ 종목 세트"""
     if not FMP_KEY:
         return set()
 
@@ -245,38 +200,34 @@ def get_fmp_roe_screener():
     r = fmp_request(url)
     if r and r.status_code == 200:
         data = r.json()
-        # Screener 결과에서 symbol 세트 추출
         return {item.get('symbol', '') for item in data if item}
     return set()
 
 
 def check_roe_individual(symbol):
-    """개별 ROE 검증 (Screener 누락 종목용) — FMP key-metrics-ttm"""
+    """개별 ROE 검증 — 2회 시도"""
     if not FMP_KEY:
         return None
 
-    url = f"https://financialmodelingprep.com/stable/key-metrics-ttm?symbol={symbol}&apikey={FMP_KEY}"
-    r = fmp_request(url, timeout=10)
-    if r and r.status_code == 200:
-        data = r.json()
-        if data and isinstance(data, list) and len(data) > 0:
-            return data[0].get('returnOnEquityTTM')
+    for attempt in range(2):
+        url = f"https://financialmodelingprep.com/stable/key-metrics-ttm?symbol={symbol}&apikey={FMP_KEY}"
+        r = fmp_request(url, timeout=10)
+        if r and r.status_code == 200:
+            data = r.json()
+            if data and isinstance(data, list) and len(data) > 0:
+                return data[0].get('returnOnEquityTTM')
+        time.sleep(3)
     return None
 
 
 # ============================================================
-# 4단계: FMP 성장성 검증 (Surprise + EPS Growth)
+# 4단계: FMP 성장성 (Surprise + EPS Growth)
 # ============================================================
 def check_growth_fmp(symbol):
-    """
-    4단계 성장 검증 — FMP 전용
-    1. Earnings Surprise >= 10%  OR
-    2. EPS Growth (YoY) >= 20%
-    """
+    """4단계 — Surprise ≥ 10% OR EPS Growth ≥ 20%"""
     if not FMP_KEY:
         return False, "FMP API Key Missing"
 
-    # Call 1: Earnings Surprise
     url_s = f"https://financialmodelingprep.com/api/v3/earnings-surprises/{symbol}?apikey={FMP_KEY}"
     s_res = fmp_request(url_s)
     if not s_res:
@@ -284,7 +235,6 @@ def check_growth_fmp(symbol):
 
     time.sleep(13)  # FMP Rate Limit 준수
 
-    # Call 2: Financial Growth
     url_g = f"https://financialmodelingprep.com/api/v3/financial-growth/{symbol}?period=quarter&limit=1&apikey={FMP_KEY}"
     g_res = fmp_request(url_g)
     if not g_res:
@@ -312,7 +262,6 @@ def check_growth_fmp(symbol):
 def run_scan():
     global fmp_call_count
     fmp_call_count = 0
-    kis_call_count = 0
 
     # ========================================
     # S&P 500 목록 수집
@@ -326,96 +275,71 @@ def run_scan():
     name_map = {item["symbol"]: item["name"] for item in sp500}
     tickers = [item["symbol"] for item in sp500]
 
-    print(f"🚀 [Alpha Scanner V2] KIS+FMP 하이브리드 엔진 가동")
-    print(f"   대상: {total}종목 | Yahoo ❌ 제거 → KIS + FMP 이중 엔진")
-    print(f"   🔑 KIS 토큰 자동 관리 (6시간 TTL)")
+    print(f"🚀 [Alpha Scanner V3] FMP 전용 엔진 가동")
+    print(f"   대상: {total}종목 | FMP 쿼터: {FMP_DAILY_LIMIT}콜/일")
 
     # ========================================
-    # [1단계] 체급 — KIS 시가총액 $10B+
+    # [1+2단계] 체급 + 에너지 — FMP 배치 시세
     # ========================================
     print(f"\n{'='*50}")
-    print(f"📊 [1단계] 체급 검증 (KIS API — 시총 $10B+)")
+    print(f"📊 [1+2단계] 체급 + 에너지 (FMP 배치 시세)")
     print(f"{'='*50}")
 
+    # 배치 시세 요청
+    quote_data = fmp_batch_quote(tickers)
+    print(f"   📊 배치 수신: {len(quote_data)}/{total}종목")
+
+    # 누락 복구 (개별 재시도 2회)
+    quote_data = recover_missing(tickers, quote_data, name_map)
+    received = len(quote_data)
+    receive_rate = round(received / total * 100, 1)
+    print(f"   📊 최종 수신: {received}/{total}종목 ({receive_rate}%)")
+
+    if receive_rate < 90:
+        print(f"   🚨 수신율 {receive_rate}% < 90% → 스캔 중단")
+        return
+
+    # 1단계: 시총 $10B+
     stage1 = []
-    exchange_map = {}
-    fail_count_1 = 0
-
-    for i, sym in enumerate(tickers):
-        if check_timeout():
-            break
-
-        result = kis_get_price_detail(sym)
-        kis_call_count += len(EXCHANGES)  # worst case
-
-        if result:
-            kis_call_count -= (len(EXCHANGES) - EXCHANGES.index(result["excd"]) - 1)
-            exchange_map[sym] = result["excd"]
-
-            if result["mcap_m"] >= 10000:  # $10B = 10,000 million
-                stage1.append({
-                    "Symbol": sym,
-                    "Name": name_map.get(sym, sym),
-                    "Price": result["price"],
-                    "MarketCap_M": result["mcap_m"],
-                })
-            # mcap_m이 0이면 KIS에서 시총 못 가져온 것 → S&P 500이니 통과시킴
-            elif result["mcap_m"] == 0:
-                stage1.append({
-                    "Symbol": sym,
-                    "Name": name_map.get(sym, sym),
-                    "Price": result["price"],
-                    "MarketCap_M": 0,  # 데이터 없지만 S&P 500이므로 통과
-                })
-        else:
-            fail_count_1 += 1
-
-        if (i + 1) % 100 == 0:
-            print(f"   {i+1}/{total} 처리 ({len(stage1)}건 통과, {fail_count_1}건 실패)")
-        time.sleep(KIS_RATE_DELAY)
+    for sym in tickers:
+        if sym not in quote_data:
+            continue
+        d = quote_data[sym]
+        if d["marketCap"] >= 10_000_000_000:  # $10B
+            stage1.append(sym)
 
     c1 = len(stage1)
-    print(f"\n✅ [1단계] 완료: {c1}건 통과 (시총 $10B+ 또는 S&P 500 자동통과)")
+    print(f"\n✅ [1단계] 체급: {c1}건 통과 (시총 $10B+)")
 
-    # ========================================
-    # [2단계] 에너지 — KIS MA50
-    # ========================================
-    print(f"\n{'='*50}")
-    print(f"📊 [2단계] 에너지 검증 (KIS API — 가격 > 50MA)")
-    print(f"{'='*50}")
-
+    # 2단계: 가격 > 50MA
     stage2 = []
+    for sym in stage1:
+        d = quote_data[sym]
+        price = d["price"]
+        ma50 = d["priceAvg50"]
 
-    for i, item in enumerate(stage1):
-        if check_timeout():
-            break
-
-        sym = item["Symbol"]
-        excd = exchange_map.get(sym, "NAS")
-        closes = kis_get_daily_prices(sym, excd)
-        kis_call_count += 1
-
-        ma50 = calculate_ma50(closes)
-        if ma50 and item["Price"] > ma50:
-            item["MA50"] = ma50
-            item["Momentum(%)"] = round(((item["Price"] - ma50) / ma50) * 100, 2)
-            stage2.append(item)
-
-        if (i + 1) % 100 == 0:
-            print(f"   {i+1}/{c1} 처리 ({len(stage2)}건 통과)")
-        time.sleep(KIS_RATE_DELAY)
+        if price > 0 and ma50 > 0 and price > ma50:
+            momentum = round(((price - ma50) / ma50) * 100, 2)
+            stage2.append({
+                "Symbol": sym,
+                "Name": name_map.get(sym, d.get("name", sym)),
+                "Price": round(price, 2),
+                "MA50": round(ma50, 2),
+                "Momentum(%)": momentum,
+                "MarketCap_M": round(d["marketCap"] / 1_000_000),
+            })
 
     c2 = len(stage2)
-    print(f"\n✅ [2단계] 완료: {c2}건 통과 (가격 > 50MA)")
+    print(f"✅ [2단계] 에너지: {c2}건 통과 (가격 > 50MA)")
+    print(f"   📡 FMP 사용: {fmp_call_count}콜 (남은 쿼터: {FMP_DAILY_LIMIT - fmp_call_count})")
 
     # ========================================
     # [3단계] 내실 — FMP Screener + 하이브리드
     # ========================================
     print(f"\n{'='*50}")
-    print(f"📊 [3단계] 내실 검증 (FMP Screener + 개별 검증)")
+    print(f"📊 [3단계] 내실 검증 (FMP Screener + 개별)")
     print(f"{'='*50}")
 
-    # Step 3a: Screener로 ROE 15%+ 목록 1콜
     roe_screener_set = get_fmp_roe_screener()
     print(f"   📡 FMP Screener: {len(roe_screener_set)}종목 확인 (1콜)")
 
@@ -433,7 +357,6 @@ def run_scan():
     print(f"   ✅ Screener 매칭: {len(stage3)}건 자동 통과")
     print(f"   🔍 개별 검증 필요: {len(verify_needed)}건")
 
-    # Step 3b: 누락 종목만 개별 FMP 호출
     for item in verify_needed:
         if check_timeout():
             break
@@ -442,15 +365,16 @@ def run_scan():
         if roe is not None and roe >= 0.15:
             item["ROE(%)"] = round(roe * 100, 2)
             stage3.append(item)
-            print(f"    ✅ {sym} ROE: {round(roe*100,1)}% → PASS (개별 검증)")
+            print(f"    ✅ {sym} ROE: {round(roe*100,1)}% → PASS")
         elif roe is not None:
             print(f"    ❌ {sym} ROE: {round(roe*100,1)}% → FAIL")
         else:
-            print(f"    🚨 {sym} ROE 데이터 없음 → SKIP")
+            print(f"    ⚠️ {sym} ROE 데이터 없음 → 탈락")
         time.sleep(13)
 
     c3 = len(stage3)
-    print(f"\n✅ [3단계] 완료: {c3}건 통과 (ROE 15%+)")
+    print(f"\n✅ [3단계] 내실: {c3}건 통과 (ROE 15%+)")
+    print(f"   📡 FMP 사용: {fmp_call_count}콜 (남은 쿼터: {FMP_DAILY_LIMIT - fmp_call_count})")
 
     # ========================================
     # [4단계] 성장 — FMP 개별
@@ -459,8 +383,17 @@ def run_scan():
     print(f"📊 [4단계] 성장 검증 (FMP API)")
     print(f"{'='*50}")
 
-    stage4 = []
+    # 쿼터 예측: 4단계는 종목당 2콜
+    needed_calls = c3 * 2
+    remaining = FMP_DAILY_LIMIT - fmp_call_count
+    if needed_calls > remaining:
+        # 쿼터 부족 시 상위 종목만 검증
+        max_stocks = remaining // 2
+        print(f"   ⚠️ 쿼터 제한! {c3}종목 중 상위 {max_stocks}종목만 검증")
+        stage3 = sorted(stage3, key=lambda x: x["Momentum(%)"], reverse=True)[:max_stocks]
+        c3 = len(stage3)
 
+    stage4 = []
     for i, item in enumerate(stage3):
         if check_timeout():
             break
@@ -477,7 +410,8 @@ def run_scan():
         time.sleep(15)
 
     c4 = len(stage4)
-    print(f"\n✅ [4단계] 완료: {c4}건 통과")
+    print(f"\n✅ [4단계] 성장: {c4}건 통과")
+    print(f"   📡 FMP 총 사용: {fmp_call_count}콜 (남은 쿼터: {FMP_DAILY_LIMIT - fmp_call_count})")
 
     # ========================================
     # 결과 저장
@@ -492,23 +426,24 @@ def run_scan():
     with open("output_reports/metadata.json", "w") as f:
         json.dump({
             "total": total,
+            "received": received,
+            "receive_rate": receive_rate,
             "success_all": True,
             "step1": c1, "step2": c2, "step3": c3, "step4": c4,
             "timestamp": datetime.now().isoformat(),
             "fmp_calls": fmp_call_count,
-            "kis_calls": kis_call_count,
+            "fmp_remaining": FMP_DAILY_LIMIT - fmp_call_count,
             "elapsed_min": elapsed_min,
-            "engine": "KIS+FMP Hybrid V2 (Yahoo-Free)",
+            "engine": "FMP Only V3 (Yahoo-Free, KIS-Free)",
         }, f)
 
     print(f"\n{'='*55}")
-    print(f"✅ [Alpha Scanner V2] 최종 결과")
-    print(f"   Total: {total}종목")
+    print(f"✅ [Alpha Scanner V3] 최종 결과")
+    print(f"   Total: {total}종목 (수신: {received}, {receive_rate}%)")
     print(f"   1단계(체급): {c1} → 2단계(에너지): {c2}")
     print(f"   → 3단계(내실): {c3} → 4단계(성장): {c4}")
-    print(f"   📡 KIS: {kis_call_count}콜 | FMP: {fmp_call_count}콜")
+    print(f"   📡 FMP: {fmp_call_count}/{FMP_DAILY_LIMIT}콜 사용 (잔여: {FMP_DAILY_LIMIT - fmp_call_count})")
     print(f"   ⏱️ 소요시간: {elapsed_min}분")
-    print(f"   비고: KIS+FMP 하이브리드 엔진, 야후 사용 안 함")
     print(f"{'='*55}")
 
 

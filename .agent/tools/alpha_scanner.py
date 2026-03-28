@@ -125,17 +125,102 @@ def yahoo_backup_metric(symbol):
 
 
 def yahoo_backup_candle(symbol):
-    """Yahoo Finance에서 1년 종가 백업 — 최후 수단"""
+    """[1차] Yahoo Finance에서 1년 종가"""
     try:
         import yfinance as yf
         t = yf.Ticker(symbol)
         hist = t.history(period="1y")
         if len(hist) >= 50:
-            closes = hist["Close"].tolist()
+            return hist["Close"].tolist()
+    except Exception as e:
+        print(f"    ⚠️ Yahoo 캔들 실패({symbol}): {e}")
+    return None
+
+
+def stooq_backup_candle(symbol):
+    """[2차] Stooq에서 1년 종가 — API 키 불필요"""
+    try:
+        from pandas_datareader import data as pdr
+        from datetime import timedelta
+        end = datetime.now()
+        start = end - timedelta(days=365)
+        df = pdr.DataReader(f"{symbol}.US", "stooq", start, end)
+        if len(df) >= 50:
+            closes = df["Close"].sort_index().tolist()
             return closes
     except Exception as e:
-        print(f"    ⚠️ Yahoo 백업 실패({symbol}): {e}")
+        print(f"    ⚠️ Stooq 캔들 실패({symbol}): {e}")
     return None
+
+
+def google_backup_candle(symbol):
+    """[3차] Google Finance 스크래핑 — 최후의 수단"""
+    try:
+        url = f"https://www.google.com/finance/quote/{symbol}:NYSE"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code != 200:
+            # NASDAQ 시도
+            url = f"https://www.google.com/finance/quote/{symbol}:NASDAQ"
+            r = requests.get(url, headers=headers, timeout=10)
+
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.text, "html.parser")
+            price_el = soup.find("div", {"class": "YMlKec fxKbKc"})
+            if price_el:
+                price_text = price_el.text.replace("$", "").replace(",", "")
+                current_price = float(price_text)
+                # Google은 현재가만 제공 → 50MA 계산 불가, 현재가만 반환
+                return [current_price] * 51  # 50MA = 현재가 (근사치)
+    except Exception as e:
+        print(f"    ⚠️ Google 캔들 실패({symbol}): {e}")
+    return None
+
+
+def get_candle_data(symbol):
+    """
+    3중 백업 캔들 데이터 수집
+    1차 Yahoo → 2차 Stooq → 3차 Google Finance
+    """
+    # 1차: Yahoo
+    closes = yahoo_backup_candle(symbol)
+    if closes and len(closes) >= 50:
+        return closes, "Yahoo"
+
+    # 2차: Stooq
+    closes = stooq_backup_candle(symbol)
+    if closes and len(closes) >= 50:
+        return closes, "Stooq"
+
+    # 3차: Google Finance (현재가만 — 최후의 수단)
+    closes = google_backup_candle(symbol)
+    if closes:
+        return closes, "Google"
+
+    return None, None
+
+
+def alert_data_gap(symbol, stage):
+    """데이터 누락 시 텔레그램 긴급 알림"""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if token and chat_id:
+        msg = (
+            f"🚨 *데이터 누락 알림*\n\n"
+            f"종목: `{symbol}`\n"
+            f"단계: {stage}\n"
+            f"Yahoo + Stooq + Google 전부 실패\n\n"
+            f"_수동 확인 필요_"
+        )
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"},
+                timeout=10,
+            )
+        except:
+            pass
+    print(f"    🚨 {symbol} 데이터 누락! (3중 백업 전부 실패)")
 
 
 def yahoo_backup_earnings(symbol):
@@ -227,47 +312,34 @@ def stage12_finnhub_metric(tickers, name_map):
 
 
 # ============================================================
-# [3+6단계] Yahoo 1차 + Finnhub 백업 → 50MA 필터 + 12-1 모멘텀
+# [3+6단계] 3중 백업 캔들 → 50MA 필터 + 12-1 모멘텀
 # ============================================================
 def stage3_candle(candidates):
     """
     1년 캔들 데이터 수집 → 50MA 필터 (3단계) + 12-1 모멘텀 (6단계)
-    Yahoo 1차 (Finnhub /candle은 무료 계정에서 403)
+    3중 백업: Yahoo → Stooq → Google Finance
+    전부 실패 시 텔레그램 긴급 알림
     """
     passed = []
-    yahoo_count = 0
-    finnhub_count = 0
+    source_counts = {"Yahoo": 0, "Stooq": 0, "Google": 0, "fail": 0}
 
     for i, item in enumerate(candidates):
         if check_timeout():
             break
 
         sym = item["Symbol"]
-        closes = None
 
-        # 1차: Yahoo Finance (candle은 Yahoo가 무제한 무료)
-        yc = yahoo_backup_candle(sym)
-        if yc and len(yc) >= 50:
-            closes = yc
-            yahoo_count += 1
+        # 3중 백업 캔들 수집
+        closes, source = get_candle_data(sym)
 
-        # 2차: Finnhub 백업 (프리미엄 계정이면 동작)
-        if closes is None or len(closes) < 50:
-            now = int(time.time())
-            one_year_ago = now - (365 * 24 * 60 * 60)
-            data = finnhub_request("/stock/candle", {
-                "symbol": sym,
-                "resolution": "D",
-                "from": one_year_ago,
-                "to": now,
-            })
-            if data and data.get("s") == "ok":
-                fc = data.get("c", [])
-                if len(fc) >= 50:
-                    closes = fc
-                    finnhub_count += 1
+        if closes is None:
+            source_counts["fail"] += 1
+            alert_data_gap(sym, "3+6단계(캔들)")
+            continue
 
-        if closes and len(closes) >= 50:
+        source_counts[source] = source_counts.get(source, 0) + 1
+
+        if len(closes) >= 50:
             current_price = closes[-1]
             ma50 = sum(closes[-50:]) / 50
 
@@ -293,9 +365,11 @@ def stage3_candle(candidates):
         if (i + 1) % 30 == 0 or i == len(candidates) - 1:
             print(f"   📡 {i+1}/{len(candidates)} 처리 | 통과: {len(passed)}")
 
-        time.sleep(0.3)  # Yahoo는 속도 제한 느슨
+        time.sleep(0.3)
 
-    print(f"   📊 데이터 소스: Yahoo {yahoo_count} | Finnhub {finnhub_count}")
+    print(f"   📊 데이터 소스: Yahoo {source_counts['Yahoo']} | Stooq {source_counts['Stooq']} | Google {source_counts['Google']}")
+    if source_counts["fail"] > 0:
+        print(f"   🚨 데이터 누락: {source_counts['fail']}종목 (텔레그램 알림 발송됨)")
 
     return passed
 

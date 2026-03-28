@@ -4,3 +4,4 @@ pandas
 vaderSentiment
 python-dotenv
 yfinance
+pandas-datareader

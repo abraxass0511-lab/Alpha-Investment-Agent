@@ -112,7 +112,54 @@ def get_trader():
 
 
 def handle_total_return():
-    """📊 전체 수익률"""
+    """📊 전체 수익률 — Worker 경유 (24시간 가동) → KIS 직접 폴백"""
+    # 1차: Worker 경유 (장 외 시간에도 동작)
+    try:
+        worker_url = os.getenv("WORKER_URL", "")
+        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+        if worker_url:
+            r = requests.get(
+                f"{worker_url}/api/portfolio",
+                headers={"Authorization": f"Bearer {worker_key}"},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                holdings = data.get("holdings", [])
+                usd_amt = data.get("buying_power", "0")
+
+                if not holdings:
+                    return f"📊 *전체 수익률*\n\n📭 현재 보유 종목이 없습니다.\n💰 예수금: *${usd_amt}*\n\n현금 100% 상태입니다, 대표님! 🛡️"
+
+                total_invested = 0
+                total_eval = 0
+                total_pnl = 0
+
+                for h in holdings:
+                    qty = h.get("qty", 0)
+                    buy_avg = h.get("buy_avg", 0)
+                    cur = h.get("current", 0)
+                    pnl = h.get("pnl_amt", 0)
+                    if qty <= 0:
+                        continue
+                    total_invested += buy_avg * qty
+                    total_eval += cur * qty
+                    total_pnl += pnl
+
+                total_rate = (total_pnl / total_invested * 100) if total_invested > 0 else 0
+                emoji = "🚀" if total_pnl >= 0 else "📉"
+
+                msg = f"📊 *전체 수익률*\n\n"
+                msg += f"💰 총 평가금액: *${total_eval:,.2f}*\n"
+                msg += f"💵 투자 원금: ${total_invested:,.2f}\n"
+                msg += f"{emoji} 누적 수익률: *{total_rate:+.1f}%* ({total_pnl:+,.2f})\n"
+                msg += f"📋 보유 종목: {len([h for h in holdings if h.get('qty', 0) > 0])}개\n"
+                msg += f"💵 예수금: *${usd_amt}*"
+                return msg
+    except Exception as e:
+        print(f"⚠️ Worker 전체수익률 조회 에러: {e}, KIS 직접 조회 시도")
+
+    # 2차: KIS 직접 호출 (폴백)
     try:
         trader = get_trader()
         result = trader.get_balance()
@@ -122,7 +169,7 @@ def handle_total_return():
         holdings, _ = result
         if not holdings:
             buying = trader.get_buying_power(symbol="AAPL", price="0")
-            usd = buying.get("ord_psbl_frcr_amt", "N/A") if buying else "N/A"
+            usd = buying.get("ord_psbl_frcr_amt", "N/A") if buying else "조회실패"
             return f"📊 *전체 수익률*\n\n📭 현재 보유 종목이 없습니다.\n💰 예수금: *${usd}*\n\n현금 100% 상태입니다, 대표님! 🛡️"
 
         total_invested = 0
@@ -156,7 +203,46 @@ def handle_total_return():
 
 
 def handle_stock_return():
-    """📈 종목별 수익률"""
+    """📈 종목별 수익률 — Worker 경유 → KIS 폴백"""
+    # 1차: Worker 경유
+    try:
+        worker_url = os.getenv("WORKER_URL", "")
+        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+        if worker_url:
+            r = requests.get(
+                f"{worker_url}/api/portfolio",
+                headers={"Authorization": f"Bearer {worker_key}"},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                holdings = data.get("holdings", [])
+                if not holdings:
+                    return "📈 *종목별 수익률*\n\n📭 보유 종목이 없습니다, 대표님."
+
+                msg = "📈 *종목별 수익률*\n\n"
+                active = [h for h in holdings if h.get("qty", 0) > 0]
+                for h in active:
+                    sym = h.get("symbol", "?")
+                    qty = h.get("qty", 0)
+                    buy_avg = h.get("buy_avg", 0)
+                    cur = h.get("current", 0)
+                    pnl = h.get("pnl_amt", 0)
+                    pnl_rt = h.get("pnl_rate", 0)
+
+                    emoji = "🟢" if pnl >= 0 else "🔴"
+                    msg += f"{emoji} *{sym}* ({pnl_rt:+.1f}%)\n"
+                    msg += f"   {qty}주 | 매입 ${buy_avg:.2f} → 현재 ${cur:.2f}\n"
+                    msg += f"   손익: {pnl:+,.2f}\n\n"
+
+                if active:
+                    best = max(active, key=lambda h: h.get("pnl_rate", 0))
+                    msg += f"🏆 효자 종목: *{best.get('symbol', '?')}*"
+                return msg
+    except Exception as e:
+        print(f"⚠️ Worker 종목별수익률 조회 에러: {e}, KIS 폴백")
+
+    # 2차: KIS 직접
     try:
         trader = get_trader()
         result = trader.get_balance()
@@ -193,7 +279,41 @@ def handle_stock_return():
 
 
 def handle_deposit():
-    """💵 예수금 현황"""
+    """💵 예수금 현황 — Worker 경유 → KIS 폴백"""
+    # 1차: Worker 경유
+    try:
+        worker_url = os.getenv("WORKER_URL", "")
+        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+        if worker_url:
+            r = requests.get(
+                f"{worker_url}/api/portfolio",
+                headers={"Authorization": f"Bearer {worker_key}"},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                usd_amt = data.get("buying_power", "0")
+                holdings = data.get("holdings", [])
+
+                total_eval = sum(h.get("current", 0) * h.get("qty", 0) for h in holdings if h.get("qty", 0) > 0)
+                total_asset = total_eval + float(usd_amt)
+                cash_ratio = (float(usd_amt) / total_asset * 100) if total_asset > 0 else 100
+
+                msg = f"💵 *예수금 현황*\n\n"
+                msg += f"💰 즉시 매수 가능: *${usd_amt}*\n"
+                msg += f"📊 현금 비중: {cash_ratio:.0f}%\n\n"
+
+                if cash_ratio >= 80:
+                    msg += "🛡️ 대부분 현금 보유 중입니다. 안전한 상태입니다!"
+                elif cash_ratio >= 50:
+                    msg += "⚖️ 적절한 현금 비중을 유지하고 있습니다."
+                else:
+                    msg += "📈 투자 비중이 높습니다. 시장 변동에 유의해 주세요."
+                return msg
+    except Exception as e:
+        print(f"⚠️ Worker 예수금 조회 에러: {e}, KIS 폴백")
+
+    # 2차: KIS 직접
     try:
         trader = get_trader()
         buying = trader.get_buying_power(symbol="AAPL", price="0")
@@ -233,7 +353,46 @@ def handle_deposit():
 
 
 def handle_balance():
-    """💰 실시간 잔고"""
+    """💰 실시간 잔고 — Worker 경유 → KIS 폴백"""
+    # 1차: Worker 경유
+    try:
+        worker_url = os.getenv("WORKER_URL", "")
+        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+        if worker_url:
+            r = requests.get(
+                f"{worker_url}/api/portfolio",
+                headers={"Authorization": f"Bearer {worker_key}"},
+                timeout=15,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                holdings = data.get("holdings", [])
+                usd_amt = data.get("buying_power", "0")
+
+                if not holdings:
+                    return f"💰 *실시간 잔고*\n\n📭 보유 종목 없음. 현금 100% 상태입니다.\n💵 예수금: *${usd_amt}*"
+
+                active = [h for h in holdings if h.get("qty", 0) > 0]
+                total_eval = 0
+
+                msg = f"💰 *실시간 잔고*\n\n"
+                msg += f"📋 현재 *{len(active)}종목* 보유 중:\n"
+
+                for h in active:
+                    sym = h.get("symbol", "?")
+                    qty = h.get("qty", 0)
+                    cur = h.get("current", 0)
+                    eval_amt = cur * qty
+                    total_eval += eval_amt
+                    msg += f"  • *{sym}*: {qty}주 × ${cur:.2f} = ${eval_amt:,.2f}\n"
+
+                msg += f"\n📈 총 평가액: *${total_eval:,.2f}*"
+                msg += f"\n💵 예수금: *${usd_amt}*"
+                return msg
+    except Exception as e:
+        print(f"⚠️ Worker 잔고 조회 에러: {e}, KIS 폴백")
+
+    # 2차: KIS 직접
     try:
         trader = get_trader()
         result = trader.get_balance()

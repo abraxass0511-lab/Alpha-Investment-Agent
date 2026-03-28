@@ -828,19 +828,24 @@ async function handleUpdate(update, env) {
       await sendMessage(env, "\u26a0\ufe0f GitHub \uc5f0\ub3d9\uc774 \uc124\uc815\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.", REPLY_KEYBOARD);
       return;
     }
-    const r = await fetch("https://api.github.com/repos/abraxass0511-lab/Alpha-Investment-Agent/actions/workflows/alpha_daily.yml/dispatches", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${env.GITHUB_PAT}`,
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "Alpha-Bot",
-      },
-      body: JSON.stringify({ ref: "main" }),
-    });
-    if (r.ok || r.status === 204) {
-      await sendMessage(env, "\ud83d\udd04 *\uc2a4\uce94 \uc7ac\uc2dc\ub3c4 \uc2dc\uc791!*\n\n\uc57d 20~30\ubd84 \ud6c4 \uacb0\uacfc\ub97c \uc54c\ub824\ub4dc\ub9ac\uaca0\uc2b5\ub2c8\ub2e4, \ub300\ud45c\ub2d8.", REPLY_KEYBOARD);
-    } else {
-      await sendMessage(env, "\u26a0\ufe0f \uc7ac\uc2dc\ub3c4 \uc694\uccad \uc2e4\ud328 (HTTP " + r.status + ")", REPLY_KEYBOARD);
+    try {
+      const r = await fetch("https://api.github.com/repos/abraxass0511-lab/Alpha-Investment-Agent/actions/workflows/alpha_daily.yml/dispatches", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${env.GITHUB_PAT}`,
+          "Accept": "application/vnd.github+json",
+          "User-Agent": "Alpha-Bot",
+        },
+        body: JSON.stringify({ ref: "main" }),
+      });
+      if (r.ok || r.status === 204) {
+        await sendMessage(env, "\ud83d\udd04 *\uc2a4\uce94 \uc7ac\uc2dc\ub3c4 \uc2dc\uc791!*\n\n\uc57d 20~30\ubd84 \ud6c4 \uacb0\uacfc\ub97c \uc54c\ub824\ub4dc\ub9ac\uaca0\uc2b5\ub2c8\ub2e4, \ub300\ud45c\ub2d8.", REPLY_KEYBOARD);
+      } else {
+        const body = await r.text().catch(() => "");
+        await sendMessage(env, "\u26a0\ufe0f *GitHub \uc11c\ubc84 \ubb38\uc81c*\n\n\uc2a4\uce94 \uc694\uccad\uc744 GitHub\uc5d0 \uc804\ub2ec\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.\nHTTP " + r.status + "\n\n\uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574\uc8fc\uc138\uc694.", REPLY_KEYBOARD);
+      }
+    } catch (e) {
+      await sendMessage(env, "\u26a0\ufe0f *GitHub \uc811\uc18d \uc2e4\ud328*\n\nGitHub \uc11c\ubc84\uc5d0 \uc5f0\uacb0\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.\n\uc624\ub958: " + (e.message || "Unknown") + "\n\n\uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574\uc8fc\uc138\uc694.", REPLY_KEYBOARD);
     }
     return;
   }

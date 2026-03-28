@@ -1,9 +1,10 @@
 name: Alpha Guardian - Portfolio Monitor & Stop-Loss
 
 on:
-  # 미국 장중 10분 간격 (UTC 14:00~20:50 = EDT 10:00~16:50, EST 9:00~15:50)
+  # EDT(여름): 장 13:30~20:00 UTC | EST(겨울): 장 14:30~21:00 UTC
+  # 양쪽 커버: 13:00~21:50 UTC → 코드에서 장 열렸는지 확인 후 실행
   schedule:
-    - cron: '*/10 14-20 * * 1-5'  # 월~금, 10분 간격
+    - cron: '*/10 13-21 * * 1-5'
   workflow_dispatch:
 
 jobs:

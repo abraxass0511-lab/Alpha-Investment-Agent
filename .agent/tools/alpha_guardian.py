@@ -270,4 +270,18 @@ def run_guardian():
 
 
 if __name__ == "__main__":
+    # 장 시간 체크 (DST 자동 반영) — 장 외 시간이면 즉시 종료
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    hour_min = now_et.hour * 60 + now_et.minute
+
+    if now_et.weekday() >= 5 or hour_min < 570 or hour_min > 960:
+        # 주말 또는 장 시간 외 (9:30 ET 이전 또는 16:00 ET 이후)
+        print(f"📅 장 외 시간 ({now_et.strftime('%H:%M ET')}). 감시 불필요.")
+        exit(0)
+
     run_guardian()

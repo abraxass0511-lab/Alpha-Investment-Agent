@@ -1,7 +1,14 @@
 {
-  "timestamp": "2026-03-28 15:55",
+  "timestamp": "2026-03-28 16:11",
   "sell": [],
   "buy": [
+    {
+      "symbol": "LITE",
+      "name": "Lumentum",
+      "price": "702.73",
+      "reason": "AI 확장, 목표가 상향 등 긍정적 신호 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 981.82%",
+      "action": "BUY"
+    },
     {
       "symbol": "FIX",
       "name": "Comfort Systems USA",
@@ -33,5 +40,5 @@
   ],
   "held_count": 0,
   "scan_passed": 14,
-  "picks_passed": 4
+  "picks_passed": 5
 }

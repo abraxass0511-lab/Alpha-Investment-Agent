@@ -130,65 +130,66 @@ def get_fundamentals(tickers):
 # 백테스트 엔진
 # ============================================================
 def run_backtest(close_df, fundamentals):
-    """월별 리밸런스 + 트레일링 스탑 + 50MA 이탈 시뮬레이션"""
+    """
+    ★ 일별 시뮬레이션 — 실제 가디언과 동일한 로직 ★
+    
+    매 거래일:
+      1) 트레일링 스탑 -10% → 즉시 매도
+      2) 50MA 이탈 → 즉시 매도
+      3) 빈 슬롯 있으면 → Top 모멘텀 종목 매수
+    """
 
     # 펀더멘털 통과 종목만 사용
     valid_symbols = [s for s in fundamentals.keys() if s in close_df.columns]
     close_filtered = close_df[valid_symbols].dropna(axis=1, how='all')
 
-    print(f"\n🚀 백테스트 시작")
+    print(f"\n🚀 백테스트 시작 (일별 시뮬레이션)")
     print(f"   대상: {len(valid_symbols)}종목 | 기간: {BACKTEST_START}~{BACKTEST_END}")
     print(f"   전략: Top {TOP_N} Quality Momentum")
     print(f"   스탑: 트레일링 {int(TRAILING_STOP*100)}% | 50MA 이탈")
+    print(f"   리밸런스: 매일 (빈 슬롯 즉시 채움)")
 
     # SPY 벤치마크
     import yfinance as yf
     spy_raw = yf.download("SPY", start=BACKTEST_START, end=BACKTEST_END, auto_adjust=True)
-    # MultiIndex 대응: 컬럼이 MultiIndex일 수 있음
     if isinstance(spy_raw.columns, pd.MultiIndex):
         spy = spy_raw["Close"]["SPY"]
     else:
         spy = spy_raw["Close"]
-
-    # 월별 리밸런스 날짜 추출
-    monthly_dates = close_filtered.resample("MS").first().index
 
     # 포트폴리오 추적
     capital = INITIAL_CAPITAL
     portfolio = {}  # {symbol: {qty, buy_price, peak_price}}
     history = []
     trade_log = []
+    all_dates = close_filtered.index
 
-    for month_start in monthly_dates:
-        # 해당 월 시작일에서 가장 가까운 실제 거래일 찾기
-        available = close_filtered.index[close_filtered.index >= month_start]
-        if len(available) == 0:
-            continue
-        rebal_date = available[0]
+    for day_idx, today in enumerate(all_dates):
+        prices = close_filtered.loc[today].dropna()
 
-        prices_at_date = close_filtered.loc[rebal_date].dropna()
-
-        # ── 매도 체크 (보유 종목) ──
+        # ══════════════════════════════
+        # 1) 매일: 트레일링 스탑 + 50MA 체크
+        # ══════════════════════════════
         sell_list = []
-        for sym, pos in portfolio.items():
-            if sym not in prices_at_date:
+        for sym, pos in list(portfolio.items()):
+            if sym not in prices:
                 continue
-            current = prices_at_date[sym]
+            current = float(prices[sym])
 
             # 고점 갱신
             if current > pos["peak_price"]:
                 pos["peak_price"] = current
 
-            # 트레일링 스탑 체크
+            # 트레일링 스탑 -10%
             drop = (current - pos["peak_price"]) / pos["peak_price"]
             if drop <= TRAILING_STOP:
                 sell_list.append((sym, "trailing_stop", current))
                 continue
 
-            # 50MA 이탈 체크
-            hist_before = close_filtered.loc[:rebal_date, sym].dropna()
-            if len(hist_before) >= 50:
-                ma50 = hist_before.iloc[-50:].mean()
+            # 50MA 이탈
+            hist = close_filtered.loc[:today, sym].dropna()
+            if len(hist) >= 50:
+                ma50 = float(hist.iloc[-50:].mean())
                 if current < ma50:
                     sell_list.append((sym, "below_50ma", current))
 
@@ -199,7 +200,7 @@ def run_backtest(close_df, fundamentals):
                 pnl = (price - pos["buy_price"]) * pos["qty"]
                 capital += price * pos["qty"]
                 trade_log.append({
-                    "date": rebal_date.strftime("%Y-%m-%d"),
+                    "date": today.strftime("%Y-%m-%d"),
                     "action": "SELL",
                     "symbol": sym,
                     "price": round(price, 2),
@@ -207,96 +208,90 @@ def run_backtest(close_df, fundamentals):
                     "pnl": round(pnl, 2),
                 })
 
-        # ── 매수 신호 생성 ──
-        candidates = []
-        for sym in prices_at_date.index:
-            if sym not in valid_symbols:
-                continue
+        # ══════════════════════════════
+        # 2) 매일: 빈 슬롯 있으면 매수
+        # ══════════════════════════════
+        open_slots = TOP_N - len(portfolio)
+        if open_slots > 0:
+            candidates = []
+            for sym in prices.index:
+                if sym not in valid_symbols or sym in portfolio:
+                    continue
 
-            hist = close_filtered.loc[:rebal_date, sym].dropna()
-            if len(hist) < 50:
-                continue
+                hist = close_filtered.loc[:today, sym].dropna()
+                if len(hist) < 50:
+                    continue
 
-            current = prices_at_date[sym]
-            ma50 = hist.iloc[-50:].mean()
+                current = float(prices[sym])
+                ma50 = float(hist.iloc[-50:].mean())
 
-            # 50MA 위인가?
-            if current <= ma50:
-                continue
+                # 50MA 위?
+                if current <= ma50:
+                    continue
 
-            # 12-1 모멘텀 계산
-            if len(hist) > 21:
-                price_t1 = hist.iloc[-22]
-                price_t12 = hist.iloc[0] if len(hist) >= 252 else hist.iloc[0]
-                if price_t12 > 0:
-                    momentum = (price_t1 / price_t12) - 1
+                # 12-1 모멘텀
+                if len(hist) > 21:
+                    price_t1 = float(hist.iloc[-22])
+                    price_t12 = float(hist.iloc[0])
+                    momentum = (price_t1 / price_t12) - 1 if price_t12 > 0 else 0
                 else:
                     momentum = 0
-            else:
-                momentum = 0
 
-            candidates.append({
-                "symbol": sym,
-                "price": current,
-                "momentum": momentum,
-                "ma50": ma50,
+                candidates.append({"symbol": sym, "price": current, "momentum": momentum})
+
+            # Top N 매수
+            candidates.sort(key=lambda x: x["momentum"], reverse=True)
+
+            for pick in candidates[:open_slots]:
+                sym = pick["symbol"]
+                price = pick["price"]
+                alloc = capital / max(open_slots, 1) * 0.95
+                qty = int(alloc / price) if price > 0 else 0
+                if qty > 0:
+                    cost = qty * price
+                    capital -= cost
+                    portfolio[sym] = {
+                        "qty": qty,
+                        "buy_price": price,
+                        "peak_price": price,
+                    }
+                    trade_log.append({
+                        "date": today.strftime("%Y-%m-%d"),
+                        "action": "BUY",
+                        "symbol": sym,
+                        "price": round(price, 2),
+                        "reason": f"momentum={round(pick['momentum']*100,1)}%",
+                        "pnl": 0,
+                    })
+                    open_slots -= 1
+
+        # ══════════════════════════════
+        # 3) 주간 기록 (매주 금요일 기준)
+        # ══════════════════════════════
+        if today.weekday() == 4 or day_idx == len(all_dates) - 1:
+            total_value = capital
+            for sym, pos in portfolio.items():
+                if sym in prices:
+                    total_value += float(prices[sym]) * pos["qty"]
+
+            spy_val = float(spy.loc[today]) if today in spy.index else 0.0
+
+            history.append({
+                "date": today.strftime("%Y-%m-%d"),
+                "portfolio_value": round(total_value, 2),
+                "capital_cash": round(capital, 2),
+                "holdings": len(portfolio),
+                "spy_price": round(spy_val, 2),
             })
 
-        # Top N 매수
-        candidates.sort(key=lambda x: x["momentum"], reverse=True)
-        top_picks = candidates[:TOP_N]
-
-        # 기존 보유 종목은 유지, 빈 슬롯에만 새로 매수
-        current_hold = set(portfolio.keys())
-        new_picks = [p for p in top_picks if p["symbol"] not in current_hold]
-        open_slots = TOP_N - len(portfolio)
-
-        for pick in new_picks[:max(0, open_slots)]:
-            sym = pick["symbol"]
-            price = pick["price"]
-            alloc = capital / max(open_slots, 1) * 0.95  # 5% 현금 유보
-            qty = int(alloc / price) if price > 0 else 0
-            if qty > 0:
-                cost = qty * price
-                capital -= cost
-                portfolio[sym] = {
-                    "qty": qty,
-                    "buy_price": price,
-                    "peak_price": price,
-                }
-                trade_log.append({
-                    "date": rebal_date.strftime("%Y-%m-%d"),
-                    "action": "BUY",
-                    "symbol": sym,
-                    "price": round(price, 2),
-                    "reason": f"momentum={round(pick['momentum']*100,1)}%",
-                    "pnl": 0,
-                })
-
-        # 포트폴리오 평가
-        total_value = capital
-        for sym, pos in portfolio.items():
-            if sym in prices_at_date:
-                total_value += prices_at_date[sym] * pos["qty"]
-
-        # SPY 벤치마크
-        spy_available = spy.index[spy.index >= rebal_date]
-        if len(spy_available) > 0:
-            spy_val = float(spy.loc[spy_available[0]])
-        else:
-            spy_val = 0.0
-
-        history.append({
-            "date": rebal_date.strftime("%Y-%m-%d"),
-            "portfolio_value": round(total_value, 2),
-            "capital_cash": round(capital, 2),
-            "holdings": len(portfolio),
-            "spy_price": round(spy_val, 2),
-        })
-
-        if len(history) % 12 == 0:
+        # 진행률 출력 (3개월마다)
+        if day_idx > 0 and day_idx % 63 == 0:
+            total_value = capital
+            for sym, pos in portfolio.items():
+                if sym in prices:
+                    total_value += float(prices[sym]) * pos["qty"]
             ret = (total_value / INITIAL_CAPITAL - 1) * 100
-            print(f"   📊 {rebal_date.strftime('%Y-%m')} | 자산: ${total_value:,.0f} | 수익률: {ret:+.1f}%")
+            print(f"   📊 {today.strftime('%Y-%m')} | 자산: ${total_value:,.0f} | 수익률: {ret:+.1f}% | 보유: {len(portfolio)}")
 
     return history, trade_log
 

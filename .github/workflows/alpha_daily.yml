@@ -48,10 +48,10 @@ jobs:
         SCAN_SUCCESS=false
         while [ $RETRY -lt $MAX_RETRIES ]; do
           echo "🔄 스캔 시도 $((RETRY+1))/$MAX_RETRIES"
-          python .agent/tools/alpha_scanner.py
+          python .agent/tools/alpha_scanner.py || echo "⚠️ 스캐너 에러 발생"
           
-          # metadata.json에서 success_all 확인
-          SUCCESS=$(python -c "import json; m=json.load(open('output_reports/metadata.json')); print(m.get('success_all', False))")
+          # metadata.json에서 success_all 확인 (파일 없으면 False)
+          SUCCESS=$(python -c "import json; m=json.load(open('output_reports/metadata.json')) if __import__('os').path.exists('output_reports/metadata.json') else {}; print(m.get('success_all', False))" 2>/dev/null || echo "False")
           
           if [ "$SUCCESS" = "True" ]; then
             echo "✅ 100% 수집 완료!"
@@ -69,7 +69,7 @@ jobs:
 
     - name: Notify scan failure
       if: steps.scanner.outputs.scan_success != 'true'
-      run: python .agent/tools/alpha_notify_failure.py
+      run: python .agent/tools/alpha_notify_failure.py || echo "⚠️ 실패 알림 전송도 실패"
 
     - name: Run Alpha Sentiment
       if: steps.scanner.outputs.scan_success == 'true'

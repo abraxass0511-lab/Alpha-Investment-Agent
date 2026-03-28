@@ -1,44 +1,8 @@
 {
-  "timestamp": "2026-03-28 18:15",
+  "timestamp": "2026-03-28 23:16",
   "sell": [],
-  "buy": [
-    {
-      "symbol": "LITE",
-      "name": "Lumentum",
-      "price": "702.73",
-      "reason": "AI 확장, 목표가 상향 등 긍정적 신호 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 981.82%",
-      "action": "BUY"
-    },
-    {
-      "symbol": "FIX",
-      "name": "Comfort Systems USA",
-      "price": "1366.77",
-      "reason": "목표가 상향 및 장기 수익률 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",
-      "action": "BUY"
-    },
-    {
-      "symbol": "VRT",
-      "name": "Vertiv",
-      "price": "251.07",
-      "reason": "AI 데이터센터 투자 확대 및 S&P 500 편입으로 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 249.48%",
-      "action": "BUY"
-    },
-    {
-      "symbol": "KEYS",
-      "name": "Keysight Technologies",
-      "price": "279.06",
-      "reason": "목표가 상향 및 성장 동력 확보 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 103.57%",
-      "action": "BUY"
-    },
-    {
-      "symbol": "JBL",
-      "name": "Jabil",
-      "price": "261.1",
-      "reason": "성장 가능성, 목표가 근접, 기술주 하락 상쇄 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 100.26%",
-      "action": "BUY"
-    }
-  ],
+  "buy": [],
   "held_count": 0,
   "scan_passed": 23,
-  "picks_passed": 5
+  "picks_passed": 0
 }

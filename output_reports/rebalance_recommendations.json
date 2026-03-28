@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-28 17:20",
+  "timestamp": "2026-03-28 17:52",
   "sell": [],
   "buy": [
     {
@@ -13,7 +13,7 @@
       "symbol": "FIX",
       "name": "Comfort Systems USA",
       "price": "1366.77",
-      "reason": "목표가 상향 및 장기 수익률 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",
+      "reason": "목표가 상향, 장기 수익률 양호, 산업 전반 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",
       "action": "BUY"
     },
     {

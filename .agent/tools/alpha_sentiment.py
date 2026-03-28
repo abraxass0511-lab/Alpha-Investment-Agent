@@ -187,17 +187,18 @@ def analyze_ticker_finnhub(row):
     quality_news = select_quality_news(news)
     
     if not quality_news:
-        # 뉴스 0건 = 중립 (스킵하지 않음 — "무소식이 희소식")
-        print(f"    📭 {symbol} 뉴스 0건 → 중립 0.5 통과")
+        # 뉴스 0건 = 펀더멘털 기반 통과 (4단계 이미 검증 완료)
+        # ★ 0.7 이상이어야 BUY → 뉴스 없다고 탈락시키면 안 됨
+        print(f"    📭 {symbol} 뉴스 0건 → 펀더멘털 기반 BUY 통과")
         return {
             "Symbol": symbol,
             "Name": name,
             "Price": price,
             "Momentum(%)": momentum,
-            "Sentiment": 0.5,
+            "Sentiment": 0.70,
             "ROE(%)": roe,
-            "Status": "HOLD (관망/대기)",
-            "Reason": "뉴스 없음 — 중립 점수 (📭 No News)",
+            "Status": "BUY (매수 승인 대기)",
+            "Reason": "뉴스 없음 — 펀더멘털 4단계 검증 통과 (📭 No News)",
         }
     
     headlines = [item['title'] for item in quality_news]

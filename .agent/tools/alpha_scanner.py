@@ -279,9 +279,10 @@ def stage12_finnhub_metric(tickers, name_map):
                 yahoo_backup_count += 1
                 print(f"    🔄 {sym} Yahoo 백업 사용 (mcap={round(mcap)}, roe={round(roe,1)})")
 
-        # 그래도 없으면 탈락
+        # 그래도 없으면 탈락 + 텔레그램 알림
         if mcap is None or roe is None:
             null_count += 1
+            alert_data_gap(sym, "1+2단계(시총/ROE)")
             continue
 
         if mcap < 10000:
@@ -414,6 +415,7 @@ def stage4_finnhub_earnings(candidates):
                 print(f"    🔄 {sym} Yahoo 어닝 백업 사용")
             else:
                 surprise_pct = 0
+                alert_data_gap(sym, "4단계(어닝)")
                 print(f"    ⚠️ {sym} → 어닝 데이터 없음 (Finnhub+Yahoo)")
 
         # 통과 기준: Surprise ≥ 10% OR EPS Growth ≥ 20%

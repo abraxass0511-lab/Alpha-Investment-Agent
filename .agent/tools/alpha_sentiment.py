@@ -17,6 +17,28 @@ PREMIUM_SOURCES = ["Reuters", "Bloomberg", "CNBC", "MarketWatch", "Wall Street J
 # 결정적 키워드 리스트
 BOOST_KEYWORDS = ["Surprise", "Upgrade", "Exclusive", "New Contract", "Beat", "Approval", "Soar", "Bullish", "Buy"]
 
+def _alert_sentiment_gap(symbol):
+    """5단계 뉴스 데이터 누락 시 텔레그램 알림"""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if token and chat_id:
+        msg = (
+            f"⚠️ *5단계 뉴스 데이터 누락*\n\n"
+            f"종목: `{symbol}`\n"
+            f"Finnhub 뉴스 0건 — 센티먼트 분석 불가\n"
+            f"_해당 종목은 5단계 스킵됩니다_"
+        )
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"},
+                timeout=10,
+            )
+        except:
+            pass
+    print(f"    ⚠️ {symbol} 뉴스 0건 — 5단계 스킵 (텔레그램 알림)")
+
+
 def fetch_finnhub_news(symbol):
     if not FINNHUB_KEY: return []
     # 최근 2일 데이터 수집 (48시간)
@@ -144,7 +166,10 @@ def analyze_ticker_finnhub(row):
     news = fetch_finnhub_news(symbol)
     quality_news = select_quality_news(news)
     
-    if not quality_news: return None
+    if not quality_news:
+        # 뉴스 데이터 누락 → 텔레그램 알림
+        _alert_sentiment_gap(symbol)
+        return None
     
     headlines = [item['title'] for item in quality_news]
     premium_found = any(item['score'] >= 10 for item in quality_news)

@@ -208,27 +208,83 @@ const REPLY_KEYBOARD = {
 // === KIS API ===
 let _cachedToken = null;
 let _tokenIssuedAt = 0;
-const TOKEN_TTL = 6 * 3600 * 1000 - 5 * 60 * 1000; // 5시간 55분 (ms)
+const TOKEN_TTL = 23 * 3600 * 1000; // 23시간 (24시간 유효, 1시간 여유)
+const KV_TOKEN_KEY = "kis_access_token";
 
 async function getKisToken(env, forceRefresh = false) {
   const now = Date.now();
+
+  // 1차: 인메모리 캐시 (같은 Worker 인스턴스 내 재사용)
   if (!forceRefresh && _cachedToken && (now - _tokenIssuedAt) < TOKEN_TTL) {
     return _cachedToken;
   }
-  const url = `${env.KIS_BASE_URL}/oauth2/tokenP`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: env.KIS_APP_KEY,
-      appsecret: env.KIS_SECRET_KEY,
-    }),
-  });
-  const data = await r.json();
-  _cachedToken = data.access_token;
-  _tokenIssuedAt = now;
-  return _cachedToken;
+
+  // 2차: KV 저장소에서 토큰 로드 (Worker 재시작 후에도 유지)
+  if (!forceRefresh && env.KV) {
+    try {
+      const kvData = await env.KV.get(KV_TOKEN_KEY);
+      if (kvData) {
+        const parsed = JSON.parse(kvData);
+        if (parsed.token && (now - parsed.issued_at) < TOKEN_TTL) {
+          _cachedToken = parsed.token;
+          _tokenIssuedAt = parsed.issued_at;
+          return _cachedToken;
+        }
+      }
+    } catch {}
+  }
+
+  // 3차: 새 토큰 발급 (6시간 재발급 제한 주의)
+  try {
+    const url = `${env.KIS_BASE_URL}/oauth2/tokenP`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "client_credentials",
+        appkey: env.KIS_APP_KEY,
+        appsecret: env.KIS_SECRET_KEY,
+      }),
+    });
+    const data = await r.json();
+
+    if (data.access_token) {
+      _cachedToken = data.access_token;
+      _tokenIssuedAt = now;
+
+      // KV에 저장 (24시간 TTL)
+      if (env.KV) {
+        try {
+          await env.KV.put(KV_TOKEN_KEY, JSON.stringify({
+            token: _cachedToken,
+            issued_at: _tokenIssuedAt,
+          }), { expirationTtl: 86400 }); // 24시간 후 자동 삭제
+        } catch {}
+      }
+
+      return _cachedToken;
+    } else {
+      console.log("Token issue failed:", data.error_description || JSON.stringify(data));
+      // 토큰 발급 실패 시 KV의 기존 토큰을 그래도 시도 (만료됐더라도)
+      if (env.KV) {
+        try {
+          const kvData = await env.KV.get(KV_TOKEN_KEY);
+          if (kvData) {
+            const parsed = JSON.parse(kvData);
+            if (parsed.token) {
+              _cachedToken = parsed.token;
+              _tokenIssuedAt = parsed.issued_at || 0;
+              return _cachedToken;
+            }
+          }
+        } catch {}
+      }
+      return null;
+    }
+  } catch (e) {
+    console.log("Token fetch error:", e.message);
+    return _cachedToken; // 네트워크 에러 시 기존 캐시 반환
+  }
 }
 
 async function getBalance(env, _retry = false) {

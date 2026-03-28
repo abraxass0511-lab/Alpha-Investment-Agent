@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-28 16:22",
+  "timestamp": "2026-03-28 16:29",
   "sell": [],
   "buy": [
     {
@@ -20,7 +20,7 @@
       "symbol": "APA",
       "name": "APA Corporation",
       "price": "44.39",
-      "reason": "실적 개선, 천연가스 수요 증가 기대, 목표가 상향 등 긍정적 요인 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 46.29%",
+      "reason": "실적 개선, 천연가스 수요 증가 전망, 목표가 상향 등 긍정적 요인 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 46.29%",
       "action": "BUY"
     },
     {

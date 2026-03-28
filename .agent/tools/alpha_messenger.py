@@ -366,10 +366,7 @@ def report_daily_picks():
     print(f"✅ 리포트 전송 및 로컬 저장 완료! (report_{date_str}.md)")
 
 if __name__ == "__main__":
-    # 미국 장 개장일 체크
-    from us_market_calendar import is_trading_day
-    if not is_trading_day():
-        print("📅 오늘은 미국 시장 휴장일입니다. 리포트를 건너뜁니다.")
-        exit(0)
-
+    # 메신저는 스캐너가 만든 결과를 발송하는 역할.
+    # 휴장일 판단은 워크플로우 cron(월~금)이 담당하므로, 메신저는 결과가 있으면 무조건 발송.
+    # 수동 실행(workflow_dispatch) 시에도 정상 동작 보장.
     report_daily_picks()

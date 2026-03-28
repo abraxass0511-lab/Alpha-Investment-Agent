@@ -71,9 +71,20 @@ export default {
         const holdings = await getBalance(env);
         const bp = await getBuyingPower(env);
 
+        // 1차: 매수가능금액 조회
+        let buyingPower = bp ? (bp.ord_psbl_frcr_amt || "0") : "0";
+
+        // 2차: $0이면 체결기준 예수금 조회(장 외 시간에도 동작)
+        if (parseFloat(buyingPower) <= 0) {
+          const deposit = await getDeposit(env);
+          if (deposit && deposit.usd_amt) {
+            buyingPower = deposit.usd_amt;
+          }
+        }
+
         const result = {
           holdings: [],
-          buying_power: bp ? (bp.ord_psbl_frcr_amt || "0") : "0",
+          buying_power: buyingPower,
         };
 
         if (holdings && holdings.length > 0) {
@@ -290,6 +301,54 @@ async function getBuyingPower(env, _retry = false) {
     _cachedToken = null;
     _tokenIssuedAt = 0;
     return getBuyingPower(env, true);
+  }
+  return null;
+}
+
+async function getDeposit(env, _retry = false) {
+  const token = await getKisToken(env);
+  if (!token) return null;
+
+  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-present-balance`;
+  const params = new URLSearchParams({
+    CANO: env.KIS_CANO,
+    ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+    WCRC_FRCR_DVSN_CD: "01",
+    NATN_CD: "840",
+    TR_MKET_CD: "00",
+    INQR_DVSN_CD: "00",
+  });
+
+  const r = await fetch(`${url}?${params}`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      appkey: env.KIS_APP_KEY,
+      appsecret: env.KIS_SECRET_KEY,
+      "tr_id": "VTRP6504R",
+    },
+  });
+
+  const data = await r.json();
+  if (data.rt_cd === "0") {
+    // output2: 통화별 예수금, USD의 frcr_dncl_amt_2가 달러 예수금
+    const currencies = data.output2 || [];
+    for (const c of currencies) {
+      if (c.crcy_cd === "USD" && parseFloat(c.frcr_dncl_amt_2 || "0") > 0) {
+        return { usd_amt: c.frcr_dncl_amt_2 };
+      }
+    }
+    // USD가 없으면 output3의 전체 금액 사용
+    const summary = data.output3 || {};
+    if (summary.frcr_evlu_tota || summary.tot_asst_amt) {
+      return { usd_amt: summary.frcr_evlu_tota || summary.tot_asst_amt || "0" };
+    }
+    return null;
+  }
+  if (!_retry) {
+    _cachedToken = null;
+    _tokenIssuedAt = 0;
+    return getDeposit(env, true);
   }
   return null;
 }

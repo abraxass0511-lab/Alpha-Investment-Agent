@@ -278,10 +278,12 @@ def handle_today_scan():
 
         scan_time = meta.get("timestamp", "N/A")
 
+        # step12: 1+2단계 합산 (Finnhub 최적화로 통합 조회)
+        step12 = meta.get('step12', meta.get('step1', 0))
+
         msg = f"🔍 *오늘자 스캔 결과*\n\n"
         msg += f"📅 스캔 시각: {scan_time[:16]}\n\n"
-        msg += f"`1단계` 체급   : {meta.get('total', 503)} → *{meta.get('step1', 0)}건*\n"
-        msg += f"`2단계` 내실   : → *{meta.get('step2', 0)}건*\n"
+        msg += f"`1+2단계` 체급+내실 : {meta.get('total', 503)} → *{step12}건*\n"
         msg += f"`3단계` 에너지 : → *{meta.get('step3', 0)}건*\n"
         msg += f"`4단계` 성장   : → *{meta.get('step4', 0)}건*\n"
         msg += f"`5단계` 심리   : → *{meta.get('step5', 0)}건*\n"

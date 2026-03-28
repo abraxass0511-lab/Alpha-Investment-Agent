@@ -47,7 +47,7 @@ def check_timeout():
 # Finnhub API 호출 (분당 60콜 준수: 1.1초 간격)
 # ============================================================
 def finnhub_request(endpoint, params=None, timeout=10):
-    """Finnhub API 호출 — 분당 60콜 제한 준수"""
+    """Finnhub API 호출 — 5회 재시도 + 점진적 대기로 데이터 100% 수집 목표"""
     global finnhub_call_count
 
     if check_timeout():
@@ -61,22 +61,22 @@ def finnhub_request(endpoint, params=None, timeout=10):
         params = {}
     params["token"] = FINNHUB_KEY
 
-    for attempt in range(3):
+    for attempt in range(5):  # 5회 재시도
         try:
             finnhub_call_count += 1
             r = requests.get(url, params=params, timeout=timeout)
             if r.status_code == 200:
                 return r.json()
             if r.status_code == 429:
-                wait = 15 * (attempt + 1)
-                print(f"    ⏳ Finnhub 429 → {wait}초 대기...")
+                wait = 10 * (attempt + 1)  # 10, 20, 30, 40, 50초
+                print(f"    ⏳ Finnhub 429 (시도 {attempt+1}/5) → {wait}초 대기...")
                 time.sleep(wait)
                 continue
-            print(f"    ⚠️ Finnhub HTTP {r.status_code}")
-            return None
+            print(f"    ⚠️ Finnhub HTTP {r.status_code} (시도 {attempt+1}/5)")
+            time.sleep(5)
         except Exception as e:
-            print(f"    ⚠️ Finnhub 에러: {e}")
-            time.sleep(3)
+            print(f"    ⚠️ Finnhub 에러: {e} (시도 {attempt+1}/5)")
+            time.sleep(5)
     return None
 
 
@@ -110,9 +110,11 @@ def stage12_finnhub_metric(tickers, name_map):
     """
     Finnhub /stock/metric 으로 시총 & ROE 동시 검사
     503종목 × 1.1초 = ~9.2분
+    Finnhub 무응답 시 재시도 → 데이터 100% 수집 목표
     """
     passed = []
     null_count = 0
+    fail_count = 0
 
     for i, sym in enumerate(tickers):
         if check_timeout():
@@ -120,40 +122,46 @@ def stage12_finnhub_metric(tickers, name_map):
 
         data = finnhub_request("/stock/metric", {"symbol": sym, "metric": "all"})
 
-        if data:
-            metric = data.get("metric", {})
-            mcap = metric.get("marketCapitalization")  # 단위: 백만 달러
-            roe = metric.get("roeTTM")
+        # 첫 시도 실패 시 3초 후 재시도
+        if data is None:
+            time.sleep(3)
+            data = finnhub_request("/stock/metric", {"symbol": sym, "metric": "all"})
 
-            # null 처리: 데이터 없는 종목 → 탈락
-            if mcap is None or roe is None:
-                null_count += 1
-                continue
+        if data is None:
+            fail_count += 1
+            continue
 
-            # 1단계: 시총 $10B+ (Finnhub은 백만 달러 단위)
-            if mcap < 10000:  # $10B = 10,000M
-                continue
+        metric = data.get("metric", {})
+        mcap = metric.get("marketCapitalization")
+        roe = metric.get("roeTTM")
 
-            # 2단계: ROE 15%+
-            if roe < 15:
-                continue
+        if mcap is None or roe is None:
+            null_count += 1
+            continue
 
-            passed.append({
-                "Symbol": sym,
-                "Name": name_map.get(sym, sym),
-                "MarketCap_M": round(mcap),
-                "ROE(%)": round(roe, 2),
-            })
+        if mcap < 10000:
+            continue
 
-        # 진행 상황 (50종목마다 출력)
+        if roe < 15:
+            continue
+
+        passed.append({
+            "Symbol": sym,
+            "Name": name_map.get(sym, sym),
+            "MarketCap_M": round(mcap),
+            "ROE(%)": round(roe, 2),
+        })
+
         if (i + 1) % 50 == 0 or i == len(tickers) - 1:
             elapsed = round((time.time() - SCAN_START) / 60, 1)
             print(f"   📡 {i+1}/{len(tickers)} 처리 | 통과: {len(passed)} | ⏱️ {elapsed}분")
 
-        time.sleep(1.1)  # 분당 60콜 준수
+        time.sleep(1.1)
 
     if null_count > 0:
-        print(f"   ⚠️ 데이터 NULL: {null_count}종목 (자동 탈락)")
+        print(f"   ⚠️ 데이터 NULL: {null_count}종목")
+    if fail_count > 0:
+        print(f"   ⚠️ API 무응답: {fail_count}종목 (재시도 후에도 실패)")
 
     return passed
 

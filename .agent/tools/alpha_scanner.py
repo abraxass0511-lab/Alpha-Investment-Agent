@@ -424,16 +424,34 @@ def stage4_finnhub_earnings(candidates):
                 print(f"    ⚠️ {sym} Yahoo Surprise 백업 에러: {e}")
                 surprise_pct = 0
 
-        # 3차: Growth가 0이면 항상 Yahoo에서 가져오기 (Surprise와 독립)
+        # 3차: Growth가 0이면 Yahoo에서 가져오기 (Surprise와 독립)
         if eps_growth == 0:
             try:
                 import yfinance as yf
                 tk = yf.Ticker(sym)
                 info = tk.info
-                # earningsGrowth → earningsQuarterlyGrowth (EPS 관련만 사용)
+                # A) earningsGrowth → earningsQuarterlyGrowth
                 yf_growth = info.get("earningsGrowth")
                 if yf_growth is None:
                     yf_growth = info.get("earningsQuarterlyGrowth")
+                
+                # B) 위에도 없으면 quarterly_income_stmt에서 직접 EPS YoY 계산
+                if yf_growth is None:
+                    try:
+                        qis = tk.quarterly_income_stmt
+                        if qis is not None and not qis.empty:
+                            eps_key = "Diluted EPS" if "Diluted EPS" in qis.index else "Basic EPS"
+                            if eps_key in qis.index:
+                                eps_vals = qis.loc[eps_key].dropna()
+                                if len(eps_vals) >= 5:
+                                    cur_eps = float(eps_vals.iloc[0])
+                                    yoy_eps = float(eps_vals.iloc[4])
+                                    if yoy_eps != 0:
+                                        yf_growth = round((cur_eps - yoy_eps) / abs(yoy_eps), 4)
+                                        print(f"    🔄 {sym} Yahoo EPS 직접계산: {cur_eps} vs {yoy_eps}")
+                    except Exception:
+                        pass
+                
                 if yf_growth is not None:
                     eps_growth = round(yf_growth, 4)
                     print(f"    🔄 {sym} Yahoo Growth 백업: {round(eps_growth*100, 1)}%")

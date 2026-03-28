@@ -468,12 +468,78 @@ def run_scan():
     print(f"{'='*55}")
 
 
+def get_last_trading_date():
+    """마지막으로 마감된 미국 거래일 (YYYY-MM-DD) 반환"""
+    from datetime import timezone, timedelta as td
+    now_utc = datetime.now(timezone.utc)
+
+    # UTC 21:00 이후면 오늘 장이 마감된 것 (EST 기준 16:00)
+    if now_utc.hour >= 21:
+        check = now_utc.date()
+    else:
+        check = (now_utc - td(days=1)).date()
+
+    # 주말 건너뛰기
+    while check.weekday() >= 5:  # 5=토, 6=일
+        check -= td(days=1)
+
+    return check.isoformat()
+
+
+def is_us_market_open():
+    """미국 장이 현재 열려있는지 (UTC 13:30~21:00, 평일만)"""
+    from datetime import timezone
+    now_utc = datetime.now(timezone.utc)
+
+    if now_utc.weekday() >= 5:
+        return False
+
+    utc_min = now_utc.hour * 60 + now_utc.minute
+    # EDT 9:30~16:00 = UTC 13:30~20:00
+    # EST 9:30~16:00 = UTC 14:30~21:00
+    # 넓은 범위 사용: UTC 13:30~21:00
+    return 13 * 60 + 30 <= utc_min < 21 * 60
+
+
 if __name__ == "__main__":
     sys.path.insert(0, os.path.dirname(__file__))
-    from us_market_calendar import is_trading_day
 
-    if not is_trading_day():
-        print("📅 오늘은 미국 시장 휴장일입니다. 스캔을 건너뜁니다.")
+    last_trading = get_last_trading_date()
+    market_open = is_us_market_open()
+    metadata_path = "output_reports/metadata.json"
+
+    print(f"📊 마지막 거래일: {last_trading} | 장 상태: {'개장 중' if market_open else '마감'}")
+
+    # 장이 열려있으면 → 항상 새 스캔 (실시간 데이터)
+    if market_open:
+        print("🔴 미국 장 개장 중 → 실시간 스캔 실행")
+        run_scan()
+        # trading_date 추가 저장
+        if os.path.exists(metadata_path):
+            meta = json.load(open(metadata_path))
+            meta["trading_date"] = last_trading
+            meta["market_status"] = "live"
+            json.dump(meta, open(metadata_path, "w"))
         sys.exit(0)
 
+    # 장이 닫혀있으면 → 기존 데이터 확인
+    if os.path.exists(metadata_path):
+        try:
+            meta = json.load(open(metadata_path))
+            if meta.get("success_all") and meta.get("trading_date") == last_trading:
+                print(f"✅ {last_trading} 데이터 이미 존재. 재스캔 불필요.")
+                print(f"   기존 결과를 그대로 사용합니다.")
+                sys.exit(0)
+        except Exception:
+            pass
+
+    # 기존 데이터 없거나 거래일 불일치 → 새 스캔
+    print(f"📡 {last_trading} 데이터 없음 → 새 스캔 실행")
     run_scan()
+
+    # trading_date 추가 저장
+    if os.path.exists(metadata_path):
+        meta = json.load(open(metadata_path))
+        meta["trading_date"] = last_trading
+        meta["market_status"] = "closed"
+        json.dump(meta, open(metadata_path, "w"))

@@ -45,7 +45,13 @@ jobs:
         PYTHONUNBUFFERED: "1"
       run: |
         timeout 2400 python .agent/tools/alpha_scanner.py || echo "⚠️ 스캐너 에러 또는 타임아웃"
-        SUCCESS=$(python -c "import json; m=json.load(open('output_reports/metadata.json')) if __import__('os').path.exists('output_reports/metadata.json') else {}; print(m.get('success_all', False))" 2>/dev/null || echo "False")
+
+        # metadata.json 성공 여부 확인
+        if [ -f "output_reports/metadata.json" ]; then
+          SUCCESS=$(python -c "import json; m=json.load(open('output_reports/metadata.json')); print(m.get('success_all', False))" 2>/dev/null || echo "False")
+        else
+          SUCCESS="False"
+        fi
         echo "scan_success=$SUCCESS" >> $GITHUB_OUTPUT
 
     - name: Run Alpha Sentiment

@@ -230,7 +230,20 @@ def report_daily_picks():
                 reason = row.get('Reason', '분석 중')
                 buy_stocks.append(symbol)
                 picks_content += f"*{len(buy_stocks)}. {name} ({symbol})* 🔥 [BUY]\n"
-                picks_content += f"   • `분석`: Finnhub 펀더멘털 + Gemini 센티먼트\n"
+                # 상세 수치 표시 (대표님 판단용)
+                mcap = row.get('MarketCap_M', 0)
+                roe_val = row.get('ROE(%)', 0)
+                price = row.get('Price', 0)
+                ma50 = row.get('MA50', 0)
+                surprise = row.get('Surprise(%)', 0)
+                eps_g = row.get('EPS_Growth(%)', 0)
+                mom = row.get('Momentum_12_1', 0)
+                mom_pct = round(mom * 100, 2) if isinstance(mom, float) and abs(mom) < 100 else mom
+                
+                picks_content += f"   📋 시총: ${mcap:,.0f}M | ROE: {roe_val}%\n"
+                picks_content += f"   📈 가격: ${price} | 50MA: ${ma50}\n"
+                picks_content += f"   🔬 Surprise: {surprise}% | Growth: {eps_g}%\n"
+                picks_content += f"   ⚡ 12-1 모멘텀: {mom_pct}%\n"
                 picks_content += f"   • `핵심근거`: {reason}\n\n"
             analysis_section += picks_content
     else:
@@ -305,16 +318,17 @@ def report_daily_picks():
             # AI에게 metadata(숫자)를 읽기 전용으로 전달
             insight_prompt = f"""다음은 오늘 S&P500 주식 스캔 결과입니다 (실제 데이터, 수정 불가):
 
-- 1단계(시총$10B+): {meta.get('step1',0)}건 통과
-- 2단계(ROE15%+): {meta.get('step2',0)}건 통과
+- 1+2단계(시총$10B+ & ROE15%+): {meta.get('step12', meta.get('step1',0))}건 통과
 - 3단계(50MA돌파): {meta.get('step3',0)}건 통과
 - 4단계(성장): {meta.get('step4',0)}건 통과
 - 5단계(심리0.7+): {meta.get('step5',0)}건 통과
 - 6단계(최종): {meta.get('step6',0)}건 선정
 - 최종 종목: {', '.join(buy_stocks) if buy_stocks else '없음'}
 
-이 데이터(숫자)는 API에서 수집한 원본입니다. 절대 수정하지 마세요.
-한국어로 2~3문장 시장 코멘트를 작성하세요. 대표님에게 보고하는 말투로."""
+⚠️ 중요 규칙:
+1. 위 숫자(통과 건수)는 API 원본이므로 절대 수정하지 마세요
+2. "통과하는 종목이 없었으나" 같은 거짓말 금지 — 위 건수가 실제 통과 건수입니다
+3. 한국어로 2~3문장 시장 코멘트를 작성하세요. 대표님에게 보고하는 말투로."""
 
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
             payload = {

@@ -348,6 +348,7 @@ def run_sentiment_v2():
     meta["step5"] = buy_count
     
     # [Step 6] 12-1 Momentum Sorting (Elite 5 Selection)
+    # ★ 양수 모멘텀만 매수 — 음수 모멘텀은 탈락 (현금 보유)
     final_picks = []
     if buy_count > 0:
         print(f"⚖️ [Step 6] 12-1 모멘텀 소팅 중... (대상: {buy_count}개 종목)")
@@ -356,9 +357,21 @@ def run_sentiment_v2():
             item['Momentum_12_1'] = mom
             item['Reason'] += f" | 12-1 모멘텀: {round(mom*100, 2)}%"
         
-        # Sort by 12-1 Momentum and take top 5
-        final_picks = sorted(buy_candidates, key=lambda x: x['Momentum_12_1'], reverse=True)[:5]
+        # ★ 양수 모멘텀만 필터 → Top 5
+        positive_mom = [x for x in buy_candidates if x['Momentum_12_1'] > 0]
+        negative_mom = [x for x in buy_candidates if x['Momentum_12_1'] <= 0]
+        
+        if negative_mom:
+            for item in negative_mom:
+                sym = item['Symbol']
+                mom_pct = round(item['Momentum_12_1'] * 100, 2)
+                print(f"    ❌ {sym} 탈락 — 12-1 모멘텀 {mom_pct}% (음수)")
+        
+        final_picks = sorted(positive_mom, key=lambda x: x['Momentum_12_1'], reverse=True)[:5]
         meta["step6"] = len(final_picks)
+        
+        if len(final_picks) < 5:
+            print(f"    ℹ️ 양수 모멘텀 {len(positive_mom)}개 → Top {len(final_picks)} 선정 (빈 슬롯 = 현금 보유)")
     else:
         meta["step6"] = 0
 

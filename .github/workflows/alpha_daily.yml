@@ -65,6 +65,7 @@ jobs:
       run: python .agent/tools/alpha_rebalancer.py
 
     - name: Run Alpha Messenger
+      id: messenger
       if: steps.scanner.outputs.scan_success == 'True'
       continue-on-error: true
       run: python .agent/tools/alpha_messenger.py
@@ -79,7 +80,11 @@ jobs:
         git diff --cached --quiet || git commit -m "📊 scan $(date -u +%Y-%m-%d)"
         git push || (git pull --rebase && git push)
 
-    # 🚨 무조건 실행: 타임아웃/크래시/취소 어떤 상황이든 알림
+    # 🚨 무조건 실행: 스캔 실패 OR 메신저 실패 → 어떤 상황이든 알림
     - name: Emergency notify on any failure
-      if: always() && steps.scanner.outputs.scan_success != 'True'
-      run: python .agent/tools/alpha_notify_failure.py || echo "⚠️ 알림 전송 실패"
+      if: always() && (steps.scanner.outputs.scan_success != 'True' || steps.messenger.outcome == 'failure')
+      run: |
+        if [ "${{ steps.messenger.outcome }}" = "failure" ]; then
+          echo "메신저 실패 — 보고서 생성됐으나 발송 실패"
+        fi
+        python .agent/tools/alpha_notify_failure.py || echo "⚠️ 알림 전송 실패"

@@ -408,31 +408,34 @@ def stage4_finnhub_earnings(candidates):
                 if current_actual is not None and yoy_actual is not None and yoy_actual != 0:
                     eps_growth = round((current_actual - yoy_actual) / abs(yoy_actual), 4)
 
-        # 2차: Yahoo 백업 (Finnhub 데이터 없거나 Growth 계산 실패 시)
-        if surprise_pct is None or (surprise_pct < 10 and eps_growth == 0):
+        # 2차: Yahoo 백업 — Surprise 없으면 Surprise 백업
+        if surprise_pct is None:
+            try:
+                ydata = yahoo_backup_earnings(sym)
+                if ydata:
+                    surprise_pct = ydata.get("surprisePercent", 0)
+                    yahoo_count += 1
+                    print(f"    🔄 {sym} Yahoo Surprise 백업 사용")
+                else:
+                    surprise_pct = 0
+                    alert_data_gap(sym, "4단계(어닝)")
+                    print(f"    ⚠️ {sym} → 어닝 데이터 없음 (Finnhub+Yahoo)")
+            except Exception as e:
+                print(f"    ⚠️ {sym} Yahoo Surprise 백업 에러: {e}")
+                surprise_pct = 0
+
+        # 3차: Growth가 0이면 항상 Yahoo에서 가져오기 (Surprise와 독립)
+        if eps_growth == 0:
             try:
                 import yfinance as yf
                 tk = yf.Ticker(sym)
                 info = tk.info
-                # Yahoo 에서 earningsGrowth (YoY EPS 성장률) 직접 제공
                 yf_growth = info.get("earningsGrowth")  # 예: 0.25 = 25%
                 if yf_growth is not None:
                     eps_growth = round(yf_growth, 4)
-                # surprise가 없으면 Yahoo에서도 가져오기
-                if surprise_pct is None:
-                    ydata = yahoo_backup_earnings(sym)
-                    if ydata:
-                        surprise_pct = ydata.get("surprisePercent", 0)
-                        yahoo_count += 1
-                        print(f"    🔄 {sym} Yahoo 어닝 백업 사용")
-                    else:
-                        surprise_pct = 0
-                        alert_data_gap(sym, "4단계(어닝)")
-                        print(f"    ⚠️ {sym} → 어닝 데이터 없음 (Finnhub+Yahoo)")
+                    print(f"    🔄 {sym} Yahoo Growth 백업: {round(eps_growth*100, 1)}%")
             except Exception as e:
                 print(f"    ⚠️ {sym} Yahoo Growth 백업 에러: {e}")
-                if surprise_pct is None:
-                    surprise_pct = 0
 
         # 통과 기준: Surprise ≥ 10% OR EPS Growth ≥ 20%
         if surprise_pct >= 10 or eps_growth >= 0.20:

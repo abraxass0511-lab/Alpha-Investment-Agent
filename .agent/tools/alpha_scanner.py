@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 # ============================================================
 # Config
 # ============================================================
-SCAN_TIMEOUT = 90 * 60  # 90분
+SCAN_TIMEOUT = 35 * 60  # 35분 (GHA 60분 타임아웃 내 여유 확보)
 SCAN_START = time.time()
 
 load_dotenv()

@@ -410,9 +410,44 @@ def process_updates():
                 response = handler()
                 send_message(response, reply_markup=REPLY_KEYBOARD)
 
-            # 승인/반려 (기존 로직과 연동)
+            # 승인/반려 (Worker 경유 매수 집행)
             elif text in ["승인", "반려"]:
                 print(f"✅ 승인/반려 입력: {text}")
+                if text == "승인":
+                    send_message(
+                        "⚔️ *[알파 집행 시작]*\n"
+                        "대표님 승인 확인! 매수를 진행하겠습니다.\n\n"
+                        "⏳ Worker 경유 KIS API 집행 중...\n"
+                        "완료 시 결과를 보고드리겠습니다.",
+                        reply_markup=REPLY_KEYBOARD
+                    )
+                    # Worker에 매수 요청 전달
+                    try:
+                        worker_url = os.getenv("WORKER_URL", "")
+                        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+                        if worker_url:
+                            import csv as csv_mod
+                            picks_path = "output_reports/final_picks_latest.csv"
+                            if os.path.exists(picks_path):
+                                with open(picks_path, "r") as f:
+                                    reader = csv_mod.DictReader(f)
+                                    symbols = [row["Symbol"] for row in reader if float(row.get("Sentiment", 0)) >= 0.7]
+                                if symbols:
+                                    r = requests.post(
+                                        f"{worker_url}/api/buy",
+                                        headers={"Authorization": f"Bearer {worker_key}"},
+                                        json={"symbols": symbols, "approved": True},
+                                        timeout=30
+                                    )
+                                    print(f"   Worker 매수 요청: {r.status_code}")
+                    except Exception as e:
+                        print(f"   ⚠️ Worker 매수 요청 에러: {e}")
+                else:
+                    send_message(
+                        "🛑 *[반려 확인]*\n"
+                        "매수를 취소합니다. 현재 포트폴리오를 유지합니다.",
+                        reply_markup=REPLY_KEYBOARD
+                    )
 
             # 그 외 모든 질문 → AI 대화 엔진
             else:

@@ -227,7 +227,8 @@ def report_daily_picks():
                 
                 picks_content += f"   📋 시총: ${mcap:,.0f}M | ROE: {roe_val}%\n"
                 picks_content += f"   📈 가격: ${price} | 50MA: ${ma50}\n"
-                picks_content += f"   🔬 Surprise: {surprise}% | Growth: {eps_g}%\n"
+                growth_str = f"{eps_g}%" if eps_g != 0 else "N/A"
+                picks_content += f"   🔬 Surprise: {surprise}% | Growth: {growth_str}\n"
                 picks_content += f"   ⚡ 12-1 모멘텀: {mom_pct}%\n"
                 picks_content += f"   • `핵심근거`: {reason}\n\n"
             analysis_section += picks_content

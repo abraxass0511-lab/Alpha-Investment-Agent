@@ -344,6 +344,95 @@ def execute_emergency_sell():
 
 
 # ═══════════════════════════════════════════════════════
+# 승인/예약 관련 헬퍼 함수
+# ═══════════════════════════════════════════════════════
+PENDING_FILE = "output_reports/pending_approval.json"
+
+def _is_market_open():
+    """미국 장 개장 여부 (US/Eastern 9:30~16:00, 월~금)"""
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    if now_et.weekday() >= 5:
+        return False
+    hour_min = now_et.hour * 60 + now_et.minute
+    return 570 <= hour_min <= 960  # 9:30~16:00
+
+def _load_buy_symbols():
+    """final_picks_latest.csv에서 매수 종목 심볼 로드"""
+    import csv as csv_mod
+    picks_path = "output_reports/final_picks_latest.csv"
+    if not os.path.exists(picks_path):
+        return []
+    try:
+        with open(picks_path, "r") as f:
+            reader = csv_mod.DictReader(f)
+            return [row["Symbol"] for row in reader if float(row.get("Sentiment", 0)) >= 0.7]
+    except:
+        return []
+
+def _save_pending_approval(symbols):
+    """예약 매수 저장"""
+    os.makedirs("output_reports", exist_ok=True)
+    with open(PENDING_FILE, "w") as f:
+        json.dump({
+            "approved": True,
+            "symbols": symbols,
+            "approved_at": datetime.now().isoformat(),
+        }, f)
+    print(f"📋 예약 저장: {symbols}")
+
+def _clear_pending_approval():
+    """예약 취소"""
+    if os.path.exists(PENDING_FILE):
+        os.remove(PENDING_FILE)
+        print("🛑 예약 취소됨")
+
+def _execute_buy_via_worker(symbols):
+    """Worker 경유 KIS 매수 실행"""
+    try:
+        worker_url = os.getenv("WORKER_URL", "")
+        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+        if worker_url and symbols:
+            r = requests.post(
+                f"{worker_url}/api/buy",
+                headers={"Authorization": f"Bearer {worker_key}"},
+                json={"symbols": symbols, "approved": True},
+                timeout=30
+            )
+            print(f"   Worker 매수 요청: {r.status_code}")
+    except Exception as e:
+        print(f"   ⚠️ Worker 매수 요청 에러: {e}")
+
+def check_pending_approval():
+    """예약 매수 확인 → 장 개장 시 자동 집행"""
+    if not os.path.exists(PENDING_FILE):
+        return
+    if not _is_market_open():
+        return
+    
+    with open(PENDING_FILE, "r") as f:
+        pending = json.load(f)
+    
+    symbols = pending.get("symbols", [])
+    approved_at = pending.get("approved_at", "")
+    
+    if symbols:
+        print(f"⚔️ 예약 매수 집행! 종목: {symbols} (승인: {approved_at})")
+        send_message(
+            f"⚔️ *[알파 예약 매수 집행]*\n"
+            f"대표님 승인({approved_at[:16]}) 기반 자동 집행!\n\n"
+            f"🔖 종목: *{', '.join(symbols)}*\n"
+            f"⏳ KIS API 매수 중...",
+            reply_markup=REPLY_KEYBOARD
+        )
+        _execute_buy_via_worker(symbols)
+        _clear_pending_approval()
+
+
+# ═══════════════════════════════════════════════════════
 # 텍스트 메시지 → 핸들러 매핑 (리플라이 키보드용)
 # ═══════════════════════════════════════════════════════
 TEXT_HANDLERS = {
@@ -410,42 +499,49 @@ def process_updates():
                 response = handler()
                 send_message(response, reply_markup=REPLY_KEYBOARD)
 
-            # 승인/반려 (Worker 경유 매수 집행)
+            # 승인/반려 (장 상태에 따라 즉시 집행 or 예약)
             elif text in ["승인", "반려"]:
                 print(f"✅ 승인/반려 입력: {text}")
                 if text == "승인":
-                    send_message(
-                        "⚔️ *[알파 집행 시작]*\n"
-                        "대표님 승인 확인! 매수를 진행하겠습니다.\n\n"
-                        "⏳ Worker 경유 KIS API 집행 중...\n"
-                        "완료 시 결과를 보고드리겠습니다.",
-                        reply_markup=REPLY_KEYBOARD
-                    )
-                    # Worker에 매수 요청 전달
-                    try:
-                        worker_url = os.getenv("WORKER_URL", "")
-                        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
-                        if worker_url:
-                            import csv as csv_mod
-                            picks_path = "output_reports/final_picks_latest.csv"
-                            if os.path.exists(picks_path):
-                                with open(picks_path, "r") as f:
-                                    reader = csv_mod.DictReader(f)
-                                    symbols = [row["Symbol"] for row in reader if float(row.get("Sentiment", 0)) >= 0.7]
-                                if symbols:
-                                    r = requests.post(
-                                        f"{worker_url}/api/buy",
-                                        headers={"Authorization": f"Bearer {worker_key}"},
-                                        json={"symbols": symbols, "approved": True},
-                                        timeout=30
-                                    )
-                                    print(f"   Worker 매수 요청: {r.status_code}")
-                    except Exception as e:
-                        print(f"   ⚠️ Worker 매수 요청 에러: {e}")
+                    # 장 상태 확인
+                    market_open = _is_market_open()
+                    
+                    # 매수 종목 목록 로드
+                    symbols = _load_buy_symbols()
+                    if not symbols:
+                        send_message(
+                            "⚠️ *매수 대상 종목이 없습니다.*\n"
+                            "스캔 결과를 먼저 확인해 주세요.",
+                            reply_markup=REPLY_KEYBOARD
+                        )
+                    elif market_open:
+                        # 장 개장 중 → 즉시 집행
+                        send_message(
+                            "⚔️ *[알파 즉시 집행]*\n"
+                            f"대표님 승인 확인! *{', '.join(symbols)}* 매수를 진행합니다.\n\n"
+                            "⏳ Worker 경유 KIS API 집행 중...\n"
+                            "완료 시 결과를 보고드리겠습니다.",
+                            reply_markup=REPLY_KEYBOARD
+                        )
+                        _execute_buy_via_worker(symbols)
+                    else:
+                        # 장 폐장 → 예약 저장
+                        _save_pending_approval(symbols)
+                        send_message(
+                            "📋 *[알파 매수 예약 완료]*\n"
+                            f"대표님 승인 접수! 다음 장 개장 시 자동 집행합니다.\n\n"
+                            f"🔖 예약 종목: *{', '.join(symbols)}*\n"
+                            f"⏰ 미국 장 개장: 한국시간 23:30 (월~금)\n\n"
+                            "취소하시려면 \"반려\"를 입력해 주세요.",
+                            reply_markup=REPLY_KEYBOARD
+                        )
                 else:
+                    # 반려 → 예약도 취소
+                    _clear_pending_approval()
                     send_message(
                         "🛑 *[반려 확인]*\n"
-                        "매수를 취소합니다. 현재 포트폴리오를 유지합니다.",
+                        "매수를 취소합니다. 예약이 있었다면 함께 취소됩니다.\n"
+                        "현재 포트폴리오를 유지합니다.",
                         reply_markup=REPLY_KEYBOARD
                     )
 
@@ -473,5 +569,8 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"🤖 알파 텔레그램 메뉴 봇 ({datetime.now().strftime('%H:%M')})")
     print("=" * 50)
+    
+    # 예약 매수 확인 (장 개장 시 자동 집행)
+    check_pending_approval()
+    
     process_updates()
-

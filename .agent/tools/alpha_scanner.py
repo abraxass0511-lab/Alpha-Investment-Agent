@@ -279,10 +279,9 @@ def stage12_finnhub_metric(tickers, name_map):
                 yahoo_backup_count += 1
                 print(f"    🔄 {sym} Yahoo 백업 사용 (mcap={round(mcap)}, roe={round(roe,1)})")
 
-        # 그래도 없으면 탈락 + 텔레그램 알림
+        # 그래도 없으면 탈락
         if mcap is None or roe is None:
             null_count += 1
-            alert_data_gap(sym, "1+2단계(시총/ROE)")
             continue
 
         if mcap < 10000:
@@ -306,6 +305,8 @@ def stage12_finnhub_metric(tickers, name_map):
 
     if null_count > 0:
         print(f"   ⚠️ 최종 데이터 없음: {null_count}종목 (Finnhub+Yahoo 모두 실패)")
+        if null_count >= 5:  # 5종목 이상 실패 시만 요약 알림 (폭탄 방지)
+            alert_data_gap(f"{null_count}종목", "1+2단계(시총/ROE) 일괄 실패")
     if yahoo_backup_count > 0:
         print(f"   🔄 Yahoo 백업 사용: {yahoo_backup_count}종목")
 
@@ -512,7 +513,7 @@ def run_scan():
             "timestamp": datetime.now().isoformat(),
             "finnhub_calls": finnhub_call_count,
             "elapsed_min": elapsed_min,
-            "engine": "Finnhub Only V5",
+            "engine": "Finnhub+Yahoo V5",
         }, f)
 
     print(f"\n{'='*55}")

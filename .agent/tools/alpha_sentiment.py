@@ -158,8 +158,8 @@ def analyze_ticker_finnhub(row):
     # ★ 숫자 데이터는 반드시 CSV 원본(row)에서만 추출 ★
     symbol = row.get('Symbol')
     name = row.get('Name')
-    price = row['Price']         # API 원본 그대로
-    momentum = row['Momentum(%)']  # API 원본 그대로
+    price = row['Price']              # API 원본 그대로
+    momentum = row['MA_Momentum(%)']  # API 원본 그대로 (★ 키명 일치!)
     roe = row['ROE(%)']          # API 원본 그대로
     
     # 1. Finnhub에서 실제 뉴스 수집 (AI 아님)
@@ -213,7 +213,7 @@ def analyze_ticker_finnhub(row):
         "Symbol": symbol,
         "Name": name,
         "Price": price,           # API 원본
-        "Momentum(%)": momentum,  # API 원본
+        "Momentum(%)": momentum,  # 보고서용 표시명
         "Sentiment": final_score,
         "ROE(%)": roe,            # API 원본
         "Status": status,
@@ -313,7 +313,7 @@ def run_sentiment_v2():
         with open("output_reports/metadata.json", "r") as f:
             meta = json.load(f)
     except:
-        meta = {"total": 503, "step1": 0, "step2": 0, "step3": 0, "step4": 0}
+        meta = {"total": 503, "step12": 0, "step3": 0, "step4": 0}
         
     meta["step5"] = buy_count
     

@@ -2,12 +2,12 @@
   "period": "2019.01 ~ 2026.03",
   "years": 7.2,
   "initial_capital": 100000,
-  "final_value": 166061.36,
-  "total_return_pct": 66.06,
-  "cagr_pct": 7.27,
-  "mdd_pct": -48.92,
-  "sharpe_ratio": 0.19,
+  "final_value": 229939.13,
+  "total_return_pct": 129.94,
+  "cagr_pct": 12.21,
+  "mdd_pct": -38.43,
+  "sharpe_ratio": 0.56,
   "spy_return_pct": 180.12,
   "spy_cagr_pct": 15.32,
-  "alpha_vs_spy": -8.05
+  "alpha_vs_spy": -3.11
 }

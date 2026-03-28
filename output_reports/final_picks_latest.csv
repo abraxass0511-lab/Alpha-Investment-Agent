@@ -1,1 +1,5 @@
-
+Symbol,Name,Price,Momentum(%),Sentiment,ROE(%),Status,Reason,Momentum_12_1
+FIX,Comfort Systems USA,1366.77,4.3,0.75,48.52,BUY (매수 승인 대기),"목표가 상향 및 장기 수익률 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",3.4477
+APA,APA Corporation,44.39,44.87,0.75,24.51,BUY (매수 승인 대기),"실적 개선, 천연가스 수요 증가 전망, 목표가 상향 등 긍정적 요인 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 46.29%",0.4629
+WMB,Williams Companies,73.58,4.68,0.75,20.84,BUY (매수 승인 대기),"안정적 현금 흐름, 성장 잠재력, 견조한 실적, 배당 매력 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 29.53%",0.2953
+BF-B,Brown–Forman,27.19,1.4,0.75,19.93,BUY (매수 승인 대기),"실적 개선 기대감과 경쟁사 협력 가능성 시사 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: -15.27%",-0.1527

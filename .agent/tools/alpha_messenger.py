@@ -207,9 +207,9 @@ def report_daily_picks():
     summary_table = "\n*📊 필터 현황 요약 (통과 기준)*\n"
     summary_table += f"| 1+2단계 | 체급+내실 | {s1}건 | 시총$10B+ ROE15%+ | Finnhub |\n"
     summary_table += f"| 3단계 | 에너지 | {s3}건 | 가격 > 50MA | Finnhub |\n"
-    summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | FMP |\n"
+    summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | Finnhub |\n"
     summary_table += f"| 5단계 | 심리 | {s5}건 | 점수 0.7+ | Finnhub+Gemini |\n"
-    summary_table += f"| 6단계 | Elite 5 | {s6}건 | 12-1 모멘텀 Top5 | FMP |\n\n"
+    summary_table += f"| 6단계 | Elite 5 | {s6}건 | 12-1 모멘텀 Top5 | Finnhub |\n\n"
 
     analysis_section = "*🧠 심층 분석 결과 (최종 승인 대기)*\n"
     buy_stocks = []
@@ -231,7 +231,7 @@ def report_daily_picks():
                 reason = row.get('Reason', '분석 중')
                 buy_stocks.append(symbol)
                 picks_content += f"*{len(buy_stocks)}. {name} ({symbol})* 🔥 [BUY]\n"
-                picks_content += f"   • `분석`: Finnhub 센티먼트 + FMP 펀더멘털\n"
+                picks_content += f"   • `분석`: Finnhub 펀더멘털 + Gemini 센티먼트\n"
                 picks_content += f"   • `핵심근거`: {reason}\n\n"
             analysis_section += picks_content
     else:

@@ -430,7 +430,12 @@ def stage4_finnhub_earnings(candidates):
                 import yfinance as yf
                 tk = yf.Ticker(sym)
                 info = tk.info
-                yf_growth = info.get("earningsGrowth")  # 예: 0.25 = 25%
+                # earningsGrowth → earningsQuarterlyGrowth → revenueGrowth 순서
+                yf_growth = info.get("earningsGrowth")
+                if yf_growth is None:
+                    yf_growth = info.get("earningsQuarterlyGrowth")
+                if yf_growth is None:
+                    yf_growth = info.get("revenueGrowth")
                 if yf_growth is not None:
                     eps_growth = round(yf_growth, 4)
                     print(f"    🔄 {sym} Yahoo Growth 백업: {round(eps_growth*100, 1)}%")

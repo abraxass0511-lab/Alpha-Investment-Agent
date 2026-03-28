@@ -151,30 +151,32 @@ def report_daily_picks():
 
     days = ['월', '화', '수', '목', '금', '토', '일']
     
-    # 데이터 기준일 = 마지막 거래일 (metadata의 timestamp 또는 계산)
+    # 데이터 기준일 = 마지막 거래일 (trading_date 우선 → 계산 폴백)
     data_date = None
-    ts = meta.get('timestamp', '')
-    if ts:
+    td = meta.get('trading_date', '')
+    if td:
         try:
-            data_date = datetime.fromisoformat(ts).date()
+            from datetime import date as date_cls
+            parts = td.split('-')
+            data_date = date_cls(int(parts[0]), int(parts[1]), int(parts[2]))
         except:
             pass
     
     if data_date is None:
-        # 마지막 거래일 계산 (주말/공휴일 제외)
+        # 마지막 거래일 계산 (주말 제외)
         from datetime import timezone
         now_utc = datetime.now(timezone.utc)
-        market_close = now_utc.replace(hour=21, minute=0)
-        d = now_utc if now_utc >= market_close else now_utc - timedelta(days=1)
-        while d.weekday() >= 5:  # 주말이면 금요일로
+        d = now_utc
+        while d.weekday() >= 5:
             d -= timedelta(days=1)
         data_date = d.date()
     
     day_name = days[data_date.weekday()]
     date_str = data_date.strftime("%Y-%m-%d")
     
+    sp500_total = meta.get('total', 503)
     title = f"📈 *{date_str}({day_name}) 알파 미국주식 정밀 리포트*\n"
-    target_info = "📡 *대상: S&P500 종목 전체*\n\n"
+    target_info = f"📡 *대상: S&P500 전체 {sp500_total}종목*\n\n"
     
     # ── 포트폴리오 현황 (최상단 배치) ──
     portfolio_section = get_portfolio_section()

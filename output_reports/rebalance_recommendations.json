@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-28 16:39",
+  "timestamp": "2026-03-28 17:02",
   "sell": [],
   "buy": [
     {
@@ -13,25 +13,32 @@
       "symbol": "FIX",
       "name": "Comfort Systems USA",
       "price": "1366.77",
-      "reason": "목표가 상향 및 장기 수익률 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",
+      "reason": "목표가 상향, 장기 수익률 양호, 산업 전반 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",
       "action": "BUY"
     },
     {
-      "symbol": "APA",
-      "name": "APA Corporation",
-      "price": "44.39",
-      "reason": "실적 개선, 천연가스 수요 증가 전망, 목표가 상향 등 긍정적 요인 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 46.29%",
+      "symbol": "VRT",
+      "name": "Vertiv",
+      "price": "251.07",
+      "reason": "AI 데이터센터 투자 확대 및 S&P 500 편입으로 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 249.48%",
       "action": "BUY"
     },
     {
-      "symbol": "WMB",
-      "name": "Williams Companies",
-      "price": "73.58",
-      "reason": "안정적 현금 흐름, 성장 잠재력, 견조한 실적, 배당 매력 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 29.53%",
+      "symbol": "KEYS",
+      "name": "Keysight Technologies",
+      "price": "279.06",
+      "reason": "목표가 상향 및 성장 동력 확보 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 103.57%",
+      "action": "BUY"
+    },
+    {
+      "symbol": "JBL",
+      "name": "Jabil",
+      "price": "261.1",
+      "reason": "성장 가능성, 목표가 근접, 기술주 하락 상쇄 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 100.26%",
       "action": "BUY"
     }
   ],
   "held_count": 0,
-  "scan_passed": 14,
-  "picks_passed": 4
+  "scan_passed": 23,
+  "picks_passed": 5
 }

@@ -371,17 +371,31 @@ def is_us_market_open():
     return 810 <= hour_min <= 1260  # 13:30~21:00 UTC
 
 def get_last_trading_date():
-    """마지막 거래일 (UTC 기준)"""
+    """마지막 거래일 (UTC 기준) — 주말 + 미국 공휴일 모두 인식"""
     from datetime import timezone
+    try:
+        from us_market_calendar import is_trading_day
+    except ImportError:
+        is_trading_day = None
+
     now = datetime.now(timezone.utc)
     market_close_today = now.replace(hour=21, minute=0, second=0, microsecond=0)
-    if now >= market_close_today and now.weekday() < 5:
-        target = now
-    else:
-        target = now - timedelta(days=1)
 
-    while target.weekday() >= 5:
-        target -= timedelta(days=1)
+    if now >= market_close_today:
+        target = now.date()
+    else:
+        target = (now - timedelta(days=1)).date()
+
+    # 주말 + 공휴일을 건너뛰어 마지막 실제 거래일을 찾음
+    for _ in range(10):  # 최대 10일 거슬러감 (연휴 대비)
+        if target.weekday() >= 5:  # 토/일
+            target -= timedelta(days=1)
+            continue
+        if is_trading_day and not is_trading_day(target):  # 공휴일
+            target -= timedelta(days=1)
+            continue
+        break  # 거래일 발견!
+
     return target.strftime("%Y-%m-%d")
 
 

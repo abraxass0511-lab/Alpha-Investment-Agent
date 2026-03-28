@@ -91,24 +91,37 @@ def update_peak(peaks, symbol, current_price, buy_price):
 # 메인: 가디언 감시 로직
 # ─────────────────────────────────────────────────────
 def run_guardian():
-    sys.path.insert(0, os.path.dirname(__file__))
-    from alpha_trader import AlphaTrader
-
-    trader = AlphaTrader()
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     print("=" * 55)
     print(f"🛡️ 알파 가디언 — 트레일링 스탑 감시 ({now})")
     print("=" * 55)
 
-    # 1. 보유 종목 조회
-    print("\n📊 [1] 보유 종목 조회...")
-    result = trader.get_balance()
-    if not result:
-        print("❌ 잔고 조회 실패")
+    worker_url = os.getenv("WORKER_URL", "")
+    worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+
+    if not worker_url:
+        print("❌ WORKER_URL 미설정")
         return
 
-    holdings, summary = result
+    # 1. 보유 종목 조회 (Worker 경유)
+    print("\n📊 [1] 보유 종목 조회 (Worker 경유)...")
+    try:
+        r = requests.get(
+            f"{worker_url}/api/portfolio",
+            headers={"Authorization": f"Bearer {worker_key}"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            print(f"❌ 잔고 조회 실패 (HTTP {r.status_code})")
+            return
+
+        data = r.json()
+        holdings = data.get("holdings", [])
+    except Exception as e:
+        print(f"❌ 잔고 조회 에러: {e}")
+        return
+
     if not holdings:
         print("📭 보유 종목 없음 — 감시 종료.")
         return
@@ -122,10 +135,10 @@ def run_guardian():
     stop_targets = []
 
     for h in holdings:
-        symbol = h.get('ovrs_pdno', '')
-        qty = int(float(h.get('ovrs_cblc_qty', '0')))
-        buy_avg = float(h.get('pchs_avg_pric', '0'))
-        current = float(h.get('now_pric2', '0'))
+        symbol = h.get("symbol", "")
+        qty = h.get("qty", 0)
+        buy_avg = h.get("buy_avg", 0)
+        current = h.get("current", 0)
 
         if qty <= 0 or not symbol:
             continue
@@ -137,8 +150,8 @@ def run_guardian():
         trailing_stop_price = peak_price * (1 - TRAILING_STOP_PCT)
 
         # 수익률 계산
-        pnl_from_buy = ((current - buy_avg) / buy_avg) * 100
-        pnl_from_peak = ((current - peak_price) / peak_price) * 100
+        pnl_from_buy = ((current - buy_avg) / buy_avg) * 100 if buy_avg > 0 else 0
+        pnl_from_peak = ((current - peak_price) / peak_price) * 100 if peak_price > 0 else 0
 
         print(f"  📍 {symbol}: 매입 ${buy_avg:.2f} | 고점 ${peak_price:.2f} | "
               f"현재 ${current:.2f} | 손절선 ${trailing_stop_price:.2f}")
@@ -161,7 +174,7 @@ def run_guardian():
     save_peak_prices(peaks)
     print(f"\n💾 고점 기록 저장 완료 ({len(peaks)}종목)")
 
-    # 5. 트레일링 스탑 발동 종목 매도
+    # 5. 트레일링 스탑 발동 종목 매도 (Worker 경유)
     if not stop_targets:
         print("\n✅ 모든 종목 안전. 트레일링 스탑 발동 없음.")
         return
@@ -178,12 +191,21 @@ def run_guardian():
         sell_price = round(current * 0.995, 2)
         print(f"  🔻 {symbol}: {qty}주 매도 @ ${sell_price}")
 
-        success = trader.sell_order(
-            symbol=symbol,
-            quantity=qty,
-            price=sell_price,
-            exchange="NASD"
-        )
+        try:
+            r = requests.post(
+                f"{worker_url}/api/sell",
+                headers={
+                    "Authorization": f"Bearer {worker_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"symbol": symbol, "qty": qty, "price": sell_price},
+                timeout=15,
+            )
+            result = r.json()
+            success = result.get("success", False)
+        except Exception as e:
+            print(f"  ⚠️ 매도 API 에러: {e}")
+            success = False
 
         sell_results.append({**t, "success": success, "sell_price": sell_price})
         time.sleep(0.5)

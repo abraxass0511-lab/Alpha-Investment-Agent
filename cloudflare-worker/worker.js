@@ -99,6 +99,30 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/sell" && request.method === "POST") {
+      try {
+        const authHeader = request.headers.get("Authorization") || "";
+        if (authHeader !== `Bearer ${env.WORKER_API_KEY || "alpha-internal"}`) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+        }
+
+        const body = await request.json();
+        const { symbol, qty, price } = body;
+        if (!symbol || !qty || !price) {
+          return new Response(JSON.stringify({ error: "Missing symbol/qty/price" }), { status: 400 });
+        }
+
+        const success = await sellOrder(env, symbol, parseInt(qty), String(price));
+        return new Response(JSON.stringify({ success, symbol, qty, price }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (request.method === "POST") {
       try {
         const update = await request.json();

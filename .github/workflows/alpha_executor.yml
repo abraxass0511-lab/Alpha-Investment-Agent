@@ -1,15 +1,11 @@
 name: Alpha Executor - Approval Check & Auto Buy
 
+# ⚠️ 비활성화됨: 매수/매도는 Cloudflare Worker에서 처리
+# GHA에서 KIS 직접 호출 시 해외 IP 차단으로 실패함
+# "승인" → 텔레그램 → Worker → KIS (정상 경로)
 on:
-  # 리포트 전송(09:00) 후 30분 간격으로 승인 확인 (09:30 ~ 11:30 KST)
-  # 대표님이 "승인" 또는 "반려" 하시면 자동 종료
-  schedule:
-    - cron: '30 0 * * 1-5'   # 09:30 KST (월~금)
-    - cron: '0 1 * * 1-5'    # 10:00 KST
-    - cron: '30 1 * * 1-5'   # 10:30 KST
-    - cron: '0 2 * * 1-5'    # 11:00 KST
-    - cron: '30 2 * * 1-5'   # 11:30 KST
-  workflow_dispatch:
+  # schedule 제거 (Worker에서 처리)
+  workflow_dispatch:  # 수동 실행만 허용 (테스트용)
 
 jobs:
   check-and-execute:

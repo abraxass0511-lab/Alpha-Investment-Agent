@@ -166,6 +166,29 @@ def report_daily_picks():
         print("🚨 데이터 수집 미완료. 리포트를 보내지 않습니다. 재시도를 대기합니다.")
         return
 
+    # 2-1. FMP 쿼터 이슈 또는 4단계 0건 알림
+    s4 = meta.get("step4", meta.get("step12", 0))
+    fmp_quota = meta.get("fmp_quota_issue", False)
+    fmp_429s = meta.get("fmp_429_count", 0)
+    
+    if fmp_quota or (s4 == 0 and meta.get("step3", 0) > 0):
+        quota_msg = f"""⚠️ *알파 스캔 알림 (FMP 쿼터 이슈)*
+
+📊 *스캔은 완료됐으나 FMP API 쿼터 부족으로 4단계 통과 0건*
+
+• 1+2단계(체급+내실): {meta.get('step12', 0)}건 통과 (Finnhub)
+• 3단계(에너지): {meta.get('step3', 0)}건 통과 (Finnhub)
+• 4단계(성장): *0건* (FMP 429 에러 {fmp_429s}회)
+• FMP 사용: {meta.get('fmp_calls', 0)}/{250}콜
+
+💡 *원인*: 같은 날 여러 번 실행으로 FMP 일일 쿼터(250콜) 소진
+🔄 *조치*: 내일 KST 오전 9시(UTC 자정) FMP 리셋 후 정상 스캔 예정
+⏱️ 소요시간: {meta.get('elapsed_min', 0)}분 | 엔진: {meta.get('engine', 'V4')}"""
+        
+        send_telegram_message(quota_msg)
+        print("⚠️ FMP 쿼터 이슈 알림 발송 완료")
+        return
+
     days = ['월', '화', '수', '목', '금', '토', '일']
     now = datetime.now()
     day_name = days[now.weekday()]

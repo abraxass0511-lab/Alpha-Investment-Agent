@@ -37,6 +37,7 @@ FINNHUB_KEY = os.getenv("FINNHUB_API_KEY")
 FMP_DAILY_LIMIT = 250
 fmp_call_count = 0
 finnhub_call_count = 0
+fmp_429_count = 0  # FMP 429 에러 카운트
 
 
 def check_timeout():
@@ -89,7 +90,7 @@ def finnhub_request(endpoint, params=None, timeout=10):
 # ============================================================
 def fmp_request(url, timeout=15, max_retries=3):
     """FMP API 호출 — 쿼터 추적, 429 재시도"""
-    global fmp_call_count
+    global fmp_call_count, fmp_429_count
 
     for attempt in range(max_retries):
         if check_timeout():
@@ -104,8 +105,9 @@ def fmp_request(url, timeout=15, max_retries=3):
             if r.status_code == 200:
                 return r
             if r.status_code == 429:
+                fmp_429_count += 1
                 wait = min(30 * (attempt + 1), 60)
-                print(f"    ⏳ FMP 429 → {wait}초 대기...")
+                print(f"    ⏳ FMP 429 (#{fmp_429_count}) → {wait}초 대기...")
                 time.sleep(wait)
                 continue
             print(f"    ⚠️ FMP HTTP {r.status_code}")
@@ -384,6 +386,9 @@ def run_scan():
 
     elapsed_min = round((time.time() - SCAN_START) / 60, 1)
 
+    # FMP 쿼터 이슈 감지
+    fmp_quota_issue = fmp_429_count >= 5 or (c4 == 0 and c3 > 0)
+
     with open("output_reports/metadata.json", "w") as f:
         json.dump({
             "total": total,
@@ -392,6 +397,8 @@ def run_scan():
             "timestamp": datetime.now().isoformat(),
             "fmp_calls": fmp_call_count,
             "fmp_remaining": FMP_DAILY_LIMIT - fmp_call_count,
+            "fmp_429_count": fmp_429_count,
+            "fmp_quota_issue": fmp_quota_issue,
             "finnhub_calls": finnhub_call_count,
             "elapsed_min": elapsed_min,
             "engine": "Finnhub + FMP Hybrid V4",

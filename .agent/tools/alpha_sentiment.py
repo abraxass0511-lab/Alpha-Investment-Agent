@@ -225,10 +225,25 @@ def calculate_12_1_momentum(symbol):
 
 def run_sentiment_v2():
     scan_file = "output_reports/daily_scan_latest.csv"
-    if not os.path.exists(scan_file): return
+    if not os.path.exists(scan_file):
+        print("❌ daily_scan_latest.csv 없음 — 스캐너가 실행되지 않았습니다.")
+        return
     
     df = pd.read_csv(scan_file)
-    if df.empty: return
+    if df.empty:
+        print("⚠️ 4단계 통과 종목 0건 — 빈 결과 처리 (FMP 쿼터 부족 가능성)")
+        # 빈 결과라도 metadata 업데이트 + 빈 final_picks 생성
+        try:
+            with open("output_reports/metadata.json", "r") as f:
+                meta = json.load(f)
+        except:
+            meta = {}
+        meta["step5"] = 0
+        meta["step6"] = 0
+        with open("output_reports/metadata.json", "w") as f:
+            json.dump(meta, f)
+        pd.DataFrame().to_csv("output_reports/final_picks_latest.csv", index=False)
+        return
     
     print(f"🚀 [Alpha Sentiment V2] Finnhub 정예 분석 가동 (품질 필터링 적용)...")
     

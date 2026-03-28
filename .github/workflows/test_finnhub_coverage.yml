@@ -1,0 +1,21 @@
+name: Test Finnhub Coverage
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-finnhub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    env:
+      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - run: pip install requests
+    - name: Test Finnhub metric coverage
+      run: python tmp/test_finnhub_coverage.py

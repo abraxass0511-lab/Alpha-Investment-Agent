@@ -143,7 +143,12 @@ def run_backtest(close_df, fundamentals):
 
     # SPY 벤치마크
     import yfinance as yf
-    spy = yf.download("SPY", start=BACKTEST_START, end=BACKTEST_END, auto_adjust=True)["Close"]
+    spy_raw = yf.download("SPY", start=BACKTEST_START, end=BACKTEST_END, auto_adjust=True)
+    # MultiIndex 대응: 컬럼이 MultiIndex일 수 있음
+    if isinstance(spy_raw.columns, pd.MultiIndex):
+        spy = spy_raw["Close"]["SPY"]
+    else:
+        spy = spy_raw["Close"]
 
     # 월별 리밸런스 날짜 추출
     monthly_dates = close_filtered.resample("MS").first().index
@@ -276,14 +281,17 @@ def run_backtest(close_df, fundamentals):
 
         # SPY 벤치마크
         spy_available = spy.index[spy.index >= rebal_date]
-        spy_price = spy.loc[spy_available[0]] if len(spy_available) > 0 else 0
+        if len(spy_available) > 0:
+            spy_val = float(spy.loc[spy_available[0]])
+        else:
+            spy_val = 0.0
 
         history.append({
             "date": rebal_date.strftime("%Y-%m-%d"),
             "portfolio_value": round(total_value, 2),
             "capital_cash": round(capital, 2),
             "holdings": len(portfolio),
-            "spy_price": round(float(spy_price), 2) if spy_price else 0,
+            "spy_price": round(spy_val, 2),
         })
 
         if len(history) % 12 == 0:

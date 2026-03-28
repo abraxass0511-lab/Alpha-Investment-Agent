@@ -112,27 +112,9 @@ def get_current_price(symbol):
 # 50MA + 최근 고점 계산 (Finnhub /candle)
 # ============================================================
 def get_ma50_and_peak(symbol):
-    """50MA와 최근 50일 최고가를 동시에 계산"""
-    if not FINNHUB_KEY:
-        return None, None
+    """50MA와 최근 50일 최고가를 동시에 계산 — Yahoo 1차"""
 
-    try:
-        now = int(time.time())
-        days_80 = now - (80 * 24 * 60 * 60)  # 80일 (여유분)
-        url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}&resolution=D&from={days_80}&to={now}&token={FINNHUB_KEY}"
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("s") == "ok":
-                closes = data.get("c", [])
-                if len(closes) >= 50:
-                    ma50 = sum(closes[-50:]) / 50
-                    peak = max(closes[-50:])  # 최근 50일 최고가
-                    return round(ma50, 2), round(peak, 2)
-    except Exception as e:
-        print(f"⚠️ {symbol} 캔들 조회 에러: {e}")
-
-    # Yahoo 백업
+    # 1차: Yahoo Finance (빠르고 안정적)
     try:
         import yfinance as yf
         t = yf.Ticker(symbol)
@@ -142,8 +124,26 @@ def get_ma50_and_peak(symbol):
             ma50 = sum(closes[-50:]) / 50
             peak = max(closes[-50:])
             return round(ma50, 2), round(peak, 2)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"    ⚠️ {symbol} Yahoo 캔들 에러: {e}")
+
+    # 2차: Finnhub 백업
+    if FINNHUB_KEY:
+        try:
+            now = int(time.time())
+            days_80 = now - (80 * 24 * 60 * 60)
+            url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}&resolution=D&from={days_80}&to={now}&token={FINNHUB_KEY}"
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("s") == "ok":
+                    closes = data.get("c", [])
+                    if len(closes) >= 50:
+                        ma50 = sum(closes[-50:]) / 50
+                        peak = max(closes[-50:])
+                        return round(ma50, 2), round(peak, 2)
+        except Exception as e:
+            print(f"    ⚠️ {symbol} Finnhub 캔들 에러: {e}")
 
     return None, None
 

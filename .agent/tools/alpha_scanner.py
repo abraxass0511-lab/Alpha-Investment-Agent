@@ -227,19 +227,16 @@ def stage12_finnhub_metric(tickers, name_map):
 
 
 # ============================================================
-# [3+6단계] Finnhub /candle → 50MA 필터 + 12-1 모멘텀 사전 계산
+# [3+6단계] Yahoo 1차 + Finnhub 백업 → 50MA 필터 + 12-1 모멘텀
 # ============================================================
-def stage3_finnhub_candle(candidates):
+def stage3_candle(candidates):
     """
-    Finnhub /stock/candle 로 252일(1년) 캔들 데이터 수집
-    → 50MA 필터 (3단계) + 12-1 모멘텀 사전 계산 (6단계용)
-    Finnhub 실패 시 Yahoo 백업으로 100% 데이터 보장
+    1년 캔들 데이터 수집 → 50MA 필터 (3단계) + 12-1 모멘텀 (6단계)
+    Yahoo 1차 (Finnhub /candle은 무료 계정에서 403)
     """
-    now = int(time.time())
-    one_year_ago = now - (365 * 24 * 60 * 60)
-
     passed = []
     yahoo_count = 0
+    finnhub_count = 0
 
     for i, item in enumerate(candidates):
         if check_timeout():
@@ -248,24 +245,27 @@ def stage3_finnhub_candle(candidates):
         sym = item["Symbol"]
         closes = None
 
-        # 1차: Finnhub
-        data = finnhub_request("/stock/candle", {
-            "symbol": sym,
-            "resolution": "D",
-            "from": one_year_ago,
-            "to": now,
-        })
+        # 1차: Yahoo Finance (candle은 Yahoo가 무제한 무료)
+        yc = yahoo_backup_candle(sym)
+        if yc and len(yc) >= 50:
+            closes = yc
+            yahoo_count += 1
 
-        if data and data.get("s") == "ok":
-            closes = data.get("c", [])
-
-        # 2차: Yahoo 백업
+        # 2차: Finnhub 백업 (프리미엄 계정이면 동작)
         if closes is None or len(closes) < 50:
-            yc = yahoo_backup_candle(sym)
-            if yc and len(yc) >= 50:
-                closes = yc
-                yahoo_count += 1
-                print(f"    🔄 {sym} Yahoo 캔들 백업 사용")
+            now = int(time.time())
+            one_year_ago = now - (365 * 24 * 60 * 60)
+            data = finnhub_request("/stock/candle", {
+                "symbol": sym,
+                "resolution": "D",
+                "from": one_year_ago,
+                "to": now,
+            })
+            if data and data.get("s") == "ok":
+                fc = data.get("c", [])
+                if len(fc) >= 50:
+                    closes = fc
+                    finnhub_count += 1
 
         if closes and len(closes) >= 50:
             current_price = closes[-1]
@@ -293,10 +293,9 @@ def stage3_finnhub_candle(candidates):
         if (i + 1) % 30 == 0 or i == len(candidates) - 1:
             print(f"   📡 {i+1}/{len(candidates)} 처리 | 통과: {len(passed)}")
 
-        time.sleep(1.1)
+        time.sleep(0.3)  # Yahoo는 속도 제한 느슨
 
-    if yahoo_count > 0:
-        print(f"   🔄 Yahoo 캔들 백업: {yahoo_count}종목")
+    print(f"   📊 데이터 소스: Yahoo {yahoo_count} | Finnhub {finnhub_count}")
 
     return passed
 
@@ -398,15 +397,15 @@ def run_scan():
     print(f"\n✅ [1+2단계] {c12}건 통과 | Finnhub {finnhub_call_count}콜")
 
     # ========================================
-    # [3+6단계] 에너지 + 모멘텀 사전계산 — Finnhub /candle
+    # [3+6단계] 에너지 + 모멘텀 사전계산 — Yahoo + Finnhub
     # ========================================
     print(f"\n{'='*55}")
-    print(f"📊 [3+6단계] 에너지(50MA) + 12-1 모멘텀 사전계산 — Finnhub /candle")
+    print(f"📊 [3+6단계] 에너지(50MA) + 12-1 모멘텀 — Yahoo 1차")
     print(f"{'='*55}")
 
-    stage3 = stage3_finnhub_candle(stage12)
+    stage3 = stage3_candle(stage12)
     c3 = len(stage3)
-    print(f"\n✅ [3단계] {c3}건 통과 | Finnhub 총 {finnhub_call_count}콜")
+    print(f"\n✅ [3단계] {c3}건 통과")
 
     # ========================================
     # [4단계] 성장 — Finnhub /earnings

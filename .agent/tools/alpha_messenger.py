@@ -115,42 +115,6 @@ def get_portfolio_section():
 
 def report_daily_picks():
     picks_file = "output_reports/final_picks_latest.csv"
-    rebal_path = "output_reports/rebalance_recommendations.json"
-    
-    # === [대표님 1회성 특별 테스트 (구글 1주 승인 → 자동 체결 검증)] ===
-    now_utc_str = datetime.now().strftime("%Y-%m-%d")
-    
-    if now_utc_str == "2026-03-27": # 토요일 KST (UTC 금요일)
-        if not os.path.exists("output_reports"): os.makedirs("output_reports")
-        try:
-            df_test = pd.read_csv(picks_file)
-        except:
-            df_test = pd.DataFrame(columns=["Symbol","Price","Name","Reason","Sentiment"])
-        
-        if "GOOGL" not in df_test.get("Symbol", pd.Series()).values:
-            row = pd.DataFrame({"Symbol": ["GOOGL"], "Price": [170.0], "Name": ["Alphabet Inc. (구글)"], "Reason": ["자동 승인/체결 풀사이클 테스트 (대표님 요청 특별 편성)"], "Sentiment": [0.9]})
-            df_test = pd.concat([df_test, row], ignore_index=True)
-            df_test.to_csv(picks_file, index=False)
-            
-    elif now_utc_str in ["2026-03-31", "2026-04-01"]: # 수요일 KST 부근
-        try:
-            with open(rebal_path, "r", encoding="utf-8") as f:
-                rebal = json.load(f)
-        except:
-            rebal = {"sell": [], "buy": []}
-            
-        sell_syms = [s["symbol"] for s in rebal.get("sell", [])]
-        if "GOOGL" not in sell_syms:
-            rebal.setdefault("sell", []).append({
-                "symbol": "GOOGL",
-                "qty": 1,
-                "current": 175.0,
-                "pnl_rate": 2.5,
-                "reasons": ["자동 매도 집행 검증 테스트 (대표님 요청 특별 편성)"]
-            })
-            with open(rebal_path, "w", encoding="utf-8") as f:
-                json.dump(rebal, f, ensure_ascii=False, indent=2)
-    # ==============================================================
     
     # 1. 메타데이터 읽기
     try:

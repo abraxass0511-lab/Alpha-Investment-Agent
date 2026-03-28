@@ -431,11 +431,6 @@ async function executeApproval(env) {
           for (const s of buyStocks) {
             if (s.price <= 0) continue;
             let qty = Math.floor(perStock / s.price);
-            
-            // [테스트] 구글인 경우 비중 계산을 무시하고 강제로 1주로 고정
-            if (s.symbol === "GOOGL") {
-              qty = 1;
-            }
 
             if (qty <= 0) {
               buyMsg += `  \u26a0\ufe0f ${s.symbol}: \ub2e8\uac00 $${s.price.toFixed(2)} > \ud22c\uc790\uae08\n`;

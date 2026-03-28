@@ -199,31 +199,42 @@ def analyze_ticker_finnhub(row):
 def calculate_12_1_momentum(symbol):
     """
     Step 6: Calculate 12-1 Month Momentum
-    Finnhub /stock/candle 사용 (FMP 완전 제거)
+    Yahoo 1차 (Finnhub /candle 무료 계정 403 차단)
     Formula: (Price_{t-1} / Price_{t-12}) - 1
     """
-    FKEY = os.getenv("FINNHUB_API_KEY")
-    if not FKEY:
-        return 0.0
-
+    # 1차: Yahoo Finance
     try:
-        now = int(time.time())
-        one_year_ago = now - (365 * 24 * 60 * 60)
-        url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}&resolution=D&from={one_year_ago}&to={now}&token={FKEY}"
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            if data.get("s") == "ok":
-                closes = data.get("c", [])
-                if len(closes) > 21:
-                    price_t1 = closes[-22]   # ~1개월 전
-                    price_t12 = closes[0]    # ~12개월 전
-                    if price_t12 > 0:
-                        momentum = (price_t1 / price_t12) - 1
-                        return round(momentum, 4)
-        print(f"    ⚠️ Finnhub 6단계 {r.status_code} ({symbol})")
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        hist = t.history(period="1y")
+        if len(hist) > 21:
+            closes = hist["Close"].tolist()
+            price_t1 = closes[-22]
+            price_t12 = closes[0]
+            if price_t12 > 0:
+                return round((price_t1 / price_t12) - 1, 4)
     except Exception as e:
-        print(f"    ⚠️ Finnhub 6단계 에러({e}) ({symbol})")
+        print(f"    ⚠️ Yahoo 6단계 에러({e}) ({symbol})")
+
+    # 2차: Finnhub 백업
+    FKEY = os.getenv("FINNHUB_API_KEY")
+    if FKEY:
+        try:
+            now = int(time.time())
+            one_year_ago = now - (365 * 24 * 60 * 60)
+            url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}&resolution=D&from={one_year_ago}&to={now}&token={FKEY}"
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("s") == "ok":
+                    closes = data.get("c", [])
+                    if len(closes) > 21:
+                        price_t1 = closes[-22]
+                        price_t12 = closes[0]
+                        if price_t12 > 0:
+                            return round((price_t1 / price_t12) - 1, 4)
+        except Exception as e:
+            print(f"    ⚠️ Finnhub 6단계 에러({e}) ({symbol})")
 
     return 0.0
 
@@ -236,7 +247,7 @@ def run_sentiment_v2():
     
     df = pd.read_csv(scan_file)
     if df.empty:
-        print("⚠️ 4단계 통과 종목 0건 — 빈 결과 처리 (FMP 쿼터 부족 가능성)")
+        print("⚠️ 4단계 통과 종목 0건 — 빈 결과 처리")
         # 빈 결과라도 metadata 업데이트 + 빈 final_picks 생성
         try:
             with open("output_reports/metadata.json", "r") as f:

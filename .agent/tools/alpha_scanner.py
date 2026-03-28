@@ -1,5 +1,5 @@
 """
-Alpha Scanner V5 — Finnhub Only Engine (FMP 완전 제거)
+Alpha Scanner V5 — Finnhub + Yahoo Engine
 
 파이프라인:
   Wikipedia → S&P 500 목록

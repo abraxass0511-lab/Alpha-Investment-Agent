@@ -14,11 +14,23 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send_telegram_message(text):
     if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("Telegram Config Missing!")
-        return
+        print("❌ Telegram Config Missing! TOKEN={}, CHAT_ID={}".format(bool(TELEGRAM_TOKEN), bool(CHAT_ID)))
+        raise RuntimeError("Telegram 설정 누락")
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}
-    requests.post(url, json=payload, timeout=30)
+    try:
+        r = requests.post(url, json=payload, timeout=30)
+        if r.status_code != 200:
+            print(f"⚠️ Telegram API 응답: {r.status_code} - {r.text[:200]}")
+            # Markdown 파싱 실패 시 plain text로 재시도
+            payload_plain = {"chat_id": CHAT_ID, "text": text}
+            r2 = requests.post(url, json=payload_plain, timeout=30)
+            print(f"   Plain text 재시도: {r2.status_code}")
+        else:
+            print(f"✅ 텔레그램 발송 성공 (길이: {len(text)}자)")
+    except Exception as e:
+        print(f"❌ 텔레그램 발송 에러: {e}")
+        raise
 
 
 def get_portfolio_section():
@@ -165,15 +177,20 @@ def report_daily_picks():
     # ── 포트폴리오 현황 (최상단 배치) ──
     portfolio_section = get_portfolio_section()
 
+    # V4 메타데이터 호환: step12 또는 step1/step2
+    s12 = meta.get('step12', 0)
+    s1 = meta.get('step1', s12)  # V4는 step12, V3는 step1
+    s3 = meta.get('step3', 0)
+    s4 = meta.get('step4', 0)
+    s5 = meta.get('step5', 0)
+    s6 = meta.get('step6', 0)
+
     summary_table = "\n*📊 필터 현황 요약 (통과 기준)*\n"
-    summary_table += "| 구분 | 필터 항목 | 통과 수 | 통과 기준 | 소스 |\n"
-    summary_table += "| :--- | :--- | :--- | :--- | :--- |\n"
-    summary_table += f"| **1단계** | **체급 (Size)** | {meta.get('step1', 0)}건 | 시총 *$10B+* | FMP |\n"
-    summary_table += f"| **2단계** | **에너지 (Momentum)** | {meta.get('step2', 0)}건 | 가격 *> 50MA* | FMP |\n"
-    summary_table += f"| **3단계** | **내실 (Quality)** | {meta.get('step3', 0)}건 | ROE *15%+* | FMP |\n"
-    summary_table += f"| **4단계** | **성장 (Growth)** | {meta.get('step4', 0)}건 | Surprise *10%* OR Growth *20%* | FMP |\n"
-    summary_table += f"| **5단계** | **심리 (Sentiment)** | {meta.get('step5', 0)}건 | 점수 *0.7+* | Finnhub |\n"
-    summary_table += f"| **6단계** | **기세 (Elite 5)** | {meta.get('step6', 0)}건 | 12-1 모멘텀 상위 5선 | FMP |\n\n"
+    summary_table += f"| 1+2단계 | 체급+내실 | {s1}건 | 시총$10B+ ROE15%+ | Finnhub |\n"
+    summary_table += f"| 3단계 | 에너지 | {s3}건 | 가격 > 50MA | Finnhub |\n"
+    summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | FMP |\n"
+    summary_table += f"| 5단계 | 심리 | {s5}건 | 점수 0.7+ | Finnhub+Gemini |\n"
+    summary_table += f"| 6단계 | Elite 5 | {s6}건 | 12-1 모멘텀 Top5 | FMP |\n\n"
 
     analysis_section = "*🧠 심층 분석 결과 (최종 승인 대기)*\n"
     buy_stocks = []

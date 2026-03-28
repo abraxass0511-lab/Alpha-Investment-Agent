@@ -104,6 +104,56 @@ def get_sp500_tickers():
 
 
 # ============================================================
+# Yahoo Finance 최후 백업 (Finnhub 10회 시도 후에도 실패한 경우만 사용)
+# ============================================================
+def yahoo_backup_metric(symbol):
+    """Yahoo Finance에서 시총+ROE 백업 — 최후 수단"""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        info = t.info
+        mcap = info.get("marketCap", 0)  # Yahoo는 달러 단위
+        roe = info.get("returnOnEquity", 0)  # Yahoo는 소수점 (0.25 = 25%)
+        if mcap and roe is not None:
+            return {
+                "mcap_m": mcap / 1_000_000,  # 백만 달러로 변환
+                "roe": roe * 100 if roe < 1 else roe,  # % 변환
+            }
+    except Exception as e:
+        print(f"    ⚠️ Yahoo 백업 실패({symbol}): {e}")
+    return None
+
+
+def yahoo_backup_candle(symbol):
+    """Yahoo Finance에서 1년 종가 백업 — 최후 수단"""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        hist = t.history(period="1y")
+        if len(hist) >= 50:
+            closes = hist["Close"].tolist()
+            return closes
+    except Exception as e:
+        print(f"    ⚠️ Yahoo 백업 실패({symbol}): {e}")
+    return None
+
+
+def yahoo_backup_earnings(symbol):
+    """Yahoo Finance에서 어닝 데이터 백업 — 최후 수단"""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        earnings = t.earnings_history
+        if earnings is not None and len(earnings) > 0:
+            latest = earnings.iloc[0]
+            surprise_pct = latest.get("surprisePercent", 0) or 0
+            return {"surprisePercent": surprise_pct * 100 if abs(surprise_pct) < 1 else surprise_pct}
+    except Exception as e:
+        print(f"    ⚠️ Yahoo 백업 실패({symbol}): {e}")
+    return None
+
+
+# ============================================================
 # [1+2단계] Finnhub /metric → 시총 + ROE 동시 필터
 # ============================================================
 def stage12_finnhub_metric(tickers, name_map):
@@ -114,7 +164,7 @@ def stage12_finnhub_metric(tickers, name_map):
     """
     passed = []
     null_count = 0
-    fail_count = 0
+    yahoo_backup_count = 0
 
     for i, sym in enumerate(tickers):
         if check_timeout():
@@ -127,14 +177,24 @@ def stage12_finnhub_metric(tickers, name_map):
             time.sleep(3)
             data = finnhub_request("/stock/metric", {"symbol": sym, "metric": "all"})
 
-        if data is None:
-            fail_count += 1
-            continue
+        mcap = None
+        roe = None
 
-        metric = data.get("metric", {})
-        mcap = metric.get("marketCapitalization")
-        roe = metric.get("roeTTM")
+        if data:
+            metric = data.get("metric", {})
+            mcap = metric.get("marketCapitalization")
+            roe = metric.get("roeTTM")
 
+        # Finnhub 데이터 없으면 → Yahoo 최후 백업
+        if mcap is None or roe is None:
+            ydata = yahoo_backup_metric(sym)
+            if ydata:
+                mcap = mcap or ydata["mcap_m"]
+                roe = roe or ydata["roe"]
+                yahoo_backup_count += 1
+                print(f"    🔄 {sym} Yahoo 백업 사용 (mcap={round(mcap)}, roe={round(roe,1)})")
+
+        # 그래도 없으면 탈락
         if mcap is None or roe is None:
             null_count += 1
             continue
@@ -159,9 +219,9 @@ def stage12_finnhub_metric(tickers, name_map):
         time.sleep(1.1)
 
     if null_count > 0:
-        print(f"   ⚠️ 데이터 NULL: {null_count}종목")
-    if fail_count > 0:
-        print(f"   ⚠️ API 무응답: {fail_count}종목 (재시도 후에도 실패)")
+        print(f"   ⚠️ 최종 데이터 없음: {null_count}종목 (Finnhub+Yahoo 모두 실패)")
+    if yahoo_backup_count > 0:
+        print(f"   🔄 Yahoo 백업 사용: {yahoo_backup_count}종목")
 
     return passed
 
@@ -173,18 +233,22 @@ def stage3_finnhub_candle(candidates):
     """
     Finnhub /stock/candle 로 252일(1년) 캔들 데이터 수집
     → 50MA 필터 (3단계) + 12-1 모멘텀 사전 계산 (6단계용)
-    1콜로 2가지 동시 처리!
+    Finnhub 실패 시 Yahoo 백업으로 100% 데이터 보장
     """
     now = int(time.time())
     one_year_ago = now - (365 * 24 * 60 * 60)
 
     passed = []
+    yahoo_count = 0
 
     for i, item in enumerate(candidates):
         if check_timeout():
             break
 
         sym = item["Symbol"]
+        closes = None
+
+        # 1차: Finnhub
         data = finnhub_request("/stock/candle", {
             "symbol": sym,
             "resolution": "D",
@@ -195,35 +259,44 @@ def stage3_finnhub_candle(candidates):
         if data and data.get("s") == "ok":
             closes = data.get("c", [])
 
-            if len(closes) >= 50:
-                current_price = closes[-1]
-                ma50 = sum(closes[-50:]) / 50
+        # 2차: Yahoo 백업
+        if closes is None or len(closes) < 50:
+            yc = yahoo_backup_candle(sym)
+            if yc and len(yc) >= 50:
+                closes = yc
+                yahoo_count += 1
+                print(f"    🔄 {sym} Yahoo 캔들 백업 사용")
 
-                # [3단계] 50MA 필터
-                if current_price > ma50:
-                    ma_momentum = round(((current_price - ma50) / ma50) * 100, 2)
-                    item["Price"] = round(current_price, 2)
-                    item["MA50"] = round(ma50, 2)
-                    item["MA_Momentum(%)"] = ma_momentum
+        if closes and len(closes) >= 50:
+            current_price = closes[-1]
+            ma50 = sum(closes[-50:]) / 50
 
-                    # [6단계 사전계산] 12-1 모멘텀
-                    if len(closes) > 21:
-                        price_t1 = closes[-22]  # ~1개월 전
-                        price_t12 = closes[0]   # ~12개월 전
-                        if price_t12 > 0:
-                            mom_12_1 = round((price_t1 / price_t12) - 1, 4)
-                        else:
-                            mom_12_1 = 0
+            if current_price > ma50:
+                ma_momentum = round(((current_price - ma50) / ma50) * 100, 2)
+                item["Price"] = round(current_price, 2)
+                item["MA50"] = round(ma50, 2)
+                item["MA_Momentum(%)"] = ma_momentum
+
+                if len(closes) > 21:
+                    price_t1 = closes[-22]
+                    price_t12 = closes[0]
+                    if price_t12 > 0:
+                        mom_12_1 = round((price_t1 / price_t12) - 1, 4)
                     else:
                         mom_12_1 = 0
+                else:
+                    mom_12_1 = 0
 
-                    item["Momentum_12_1"] = mom_12_1
-                    passed.append(item)
+                item["Momentum_12_1"] = mom_12_1
+                passed.append(item)
 
         if (i + 1) % 30 == 0 or i == len(candidates) - 1:
             print(f"   📡 {i+1}/{len(candidates)} 처리 | 통과: {len(passed)}")
 
         time.sleep(1.1)
+
+    if yahoo_count > 0:
+        print(f"   🔄 Yahoo 캔들 백업: {yahoo_count}종목")
 
     return passed
 
@@ -234,51 +307,61 @@ def stage3_finnhub_candle(candidates):
 def stage4_finnhub_earnings(candidates):
     """
     Finnhub /stock/earnings 로 어닝 서프라이즈 + YoY EPS 성장률 검증
-    1콜로 서프라이즈%와 EPS Growth 동시 확인!
+    Finnhub 실패 시 Yahoo 백업으로 100% 데이터 보장
     """
     passed = []
+    yahoo_count = 0
 
     for i, item in enumerate(candidates):
         if check_timeout():
             break
 
         sym = item["Symbol"]
+        surprise_pct = None
+        eps_growth = 0
+
+        # 1차: Finnhub
         data = finnhub_request("/stock/earnings", {"symbol": sym, "limit": 8})
 
         if data and isinstance(data, list) and len(data) > 0:
-            # 가장 최근 실적
-            latest = data[0]
-            actual = latest.get("actual")
-            estimate = latest.get("estimate")
-            surprise_pct = latest.get("surprisePercent", 0) or 0
+            surprise_pct = data[0].get("surprisePercent", 0) or 0
 
-            # EPS Growth: 올해 vs 작년 동분기 비교
-            eps_growth = 0
             if len(data) >= 5:
-                # data[0] = 최근, data[4] = 4분기 전 (작년 동분기)
                 current_actual = data[0].get("actual", 0) or 0
                 yoy_actual = data[4].get("actual", 0) or 0
                 if yoy_actual != 0 and current_actual != 0:
                     eps_growth = round((current_actual - yoy_actual) / abs(yoy_actual), 4)
 
-            # 통과 기준: Surprise ≥ 10% OR EPS Growth ≥ 20%
-            if surprise_pct >= 10 or eps_growth >= 0.20:
-                reason = f"Surprise: {round(surprise_pct, 1)}%, Growth: {round(eps_growth * 100, 1)}%"
-                item["GrowthReason"] = reason
-                item["Surprise(%)"] = round(surprise_pct, 1)
-                item["EPS_Growth(%)"] = round(eps_growth * 100, 1)
-                passed.append(item)
-                print(f"    ✅ {sym} → {reason}")
+        # 2차: Yahoo 백업 (Finnhub 데이터 없을 때)
+        if surprise_pct is None:
+            ydata = yahoo_backup_earnings(sym)
+            if ydata:
+                surprise_pct = ydata.get("surprisePercent", 0)
+                yahoo_count += 1
+                print(f"    🔄 {sym} Yahoo 어닝 백업 사용")
             else:
-                print(f"    ❌ {sym} → Surprise: {round(surprise_pct, 1)}%, Growth: {round(eps_growth * 100, 1)}%")
+                surprise_pct = 0
+                print(f"    ⚠️ {sym} → 어닝 데이터 없음 (Finnhub+Yahoo)")
+
+        # 통과 기준: Surprise ≥ 10% OR EPS Growth ≥ 20%
+        if surprise_pct >= 10 or eps_growth >= 0.20:
+            reason = f"Surprise: {round(surprise_pct, 1)}%, Growth: {round(eps_growth * 100, 1)}%"
+            item["GrowthReason"] = reason
+            item["Surprise(%)"] = round(surprise_pct, 1)
+            item["EPS_Growth(%)"] = round(eps_growth * 100, 1)
+            passed.append(item)
+            print(f"    ✅ {sym} → {reason}")
         else:
-            print(f"    ⚠️ {sym} → 어닝 데이터 없음")
+            print(f"    ❌ {sym} → Surprise: {round(surprise_pct, 1)}%, Growth: {round(eps_growth * 100, 1)}%")
 
         if (i + 1) % 20 == 0 or i == len(candidates) - 1:
             elapsed = round((time.time() - SCAN_START) / 60, 1)
             print(f"   📡 {i+1}/{len(candidates)} | 통과: {len(passed)} | ⏱️ {elapsed}분")
 
         time.sleep(1.1)
+
+    if yahoo_count > 0:
+        print(f"   🔄 Yahoo 어닝 백업: {yahoo_count}종목")
 
     return passed
 

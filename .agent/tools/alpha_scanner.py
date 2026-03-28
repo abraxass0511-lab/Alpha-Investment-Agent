@@ -451,6 +451,26 @@ def stage4_finnhub_earnings(candidates):
                                         print(f"    🔄 {sym} Yahoo EPS 직접계산: {cur_eps} vs {yoy_eps}")
                     except Exception:
                         pass
+
+                # C) earnings_history에서 YoY 직접 계산 (4분기 전 대비)
+                if yf_growth is None:
+                    try:
+                        eh = tk.earnings_history
+                        if eh is not None and len(eh) >= 5:
+                            cur_actual = eh.iloc[0].get("epsActual")
+                            yoy_actual = eh.iloc[4].get("epsActual")
+                            if cur_actual is not None and yoy_actual is not None and yoy_actual != 0:
+                                yf_growth = round((cur_actual - yoy_actual) / abs(yoy_actual), 4)
+                                print(f"    🔄 {sym} Yahoo earnings_history YoY: {cur_actual} vs {yoy_actual}")
+                    except Exception:
+                        pass
+
+                # D) 최후 수단: revenueGrowth (매출 성장률로 대체 표시)
+                if yf_growth is None:
+                    rev_growth = info.get("revenueGrowth")
+                    if rev_growth is not None:
+                        yf_growth = round(rev_growth, 4)
+                        print(f"    🔄 {sym} Yahoo revenueGrowth 폴백: {round(yf_growth*100, 1)}%")
                 
                 if yf_growth is not None:
                     eps_growth = round(yf_growth, 4)

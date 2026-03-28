@@ -1,5 +1,5 @@
 Symbol,Name,Price,Momentum(%),Sentiment,ROE(%),MarketCap_M,MA50,Surprise(%),EPS_Growth(%),Status,Reason,Momentum_12_1
-LITE,Lumentum,702.73,21.63,0.75,27.64,50175,577.75,17.4,0.0,BUY (매수 승인 대기),"AI 확장, 목표가 상향 등 긍정적 신호 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 981.82%",9.8182
+LITE,Lumentum,702.73,21.63,0.75,27.64,50175,577.75,17.4,201.1,BUY (매수 승인 대기),"AI 확장, 목표가 상향 등 긍정적 신호 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 981.82%",9.8182
 FIX,Comfort Systems USA,1366.77,4.3,0.75,48.52,47781,1310.41,37.3,129.5,BUY (매수 승인 대기),"목표가 상향 및 장기 수익률 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",3.4477
 VRT,Vertiv,251.07,8.97,0.75,40.26,104683,230.4,5.1,199.5,BUY (매수 승인 대기),"AI 데이터센터 투자 확대 및 S&P 500 편입으로 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 249.48%",2.4948
 KEYS,Keysight Technologies,279.06,8.61,0.75,16.56,47859,256.94,6.6,68.0,BUY (매수 승인 대기),"목표가 상향 및 성장 동력 확보 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 103.57%",1.0357

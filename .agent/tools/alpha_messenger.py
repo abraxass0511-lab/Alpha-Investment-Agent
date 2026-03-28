@@ -32,6 +32,67 @@ def send_telegram_message(text):
         print(f"❌ 텔레그램 발송 에러: {e}")
         raise
 
+DEPOSIT_CACHE_FILE = "output_reports/deposit_cache.json"
+
+
+def _get_deposit_fallback():
+    """예수금 3단계 폴백: KIS get_deposit → KIS get_buying_power → 캐시 파일"""
+    # 1차: KIS 체결기준 예수금 조회 (VTRP6504R, 장 외에도 동작)
+    try:
+        from alpha_trader import AlphaTrader
+        trader = AlphaTrader()
+        deposit = trader.get_deposit()
+        if deposit:
+            currencies = deposit.get("output2", [])
+            for c in currencies:
+                if c.get("crcy_cd") == "USD":
+                    amt = c.get("frcr_dncl_amt_2", "0")
+                    if float(amt) > 0:
+                        print(f"  💰 예수금 폴백(get_deposit): ${amt}")
+                        return amt
+    except Exception as e:
+        print(f"  ⚠️ get_deposit 폴백 에러: {e}")
+
+    # 2차: KIS 매수가능금액 조회 (VTTS3007R)
+    try:
+        from alpha_trader import AlphaTrader
+        trader = AlphaTrader()
+        bp = trader.get_buying_power(symbol="AAPL", price="0")
+        if bp:
+            amt = bp.get("ord_psbl_frcr_amt", "0")
+            if float(amt) > 0:
+                print(f"  💰 예수금 폴백(get_buying_power): ${amt}")
+                return amt
+    except Exception as e:
+        print(f"  ⚠️ get_buying_power 폴백 에러: {e}")
+
+    # 3차: 캐시된 마지막 예수금
+    try:
+        if os.path.exists(DEPOSIT_CACHE_FILE):
+            with open(DEPOSIT_CACHE_FILE, "r") as f:
+                cache = json.load(f)
+            amt = cache.get("usd_amt", "0")
+            if float(amt) > 0:
+                print(f"  💰 예수금 폴백(캐시): ${amt}")
+                return amt
+    except Exception as e:
+        print(f"  ⚠️ 캐시 폴백 에러: {e}")
+
+    return "0"
+
+
+def _save_deposit_cache(usd_amt):
+    """유효한 예수금을 캐시 파일에 저장"""
+    try:
+        os.makedirs("output_reports", exist_ok=True)
+        with open(DEPOSIT_CACHE_FILE, "w") as f:
+            json.dump({
+                "usd_amt": str(usd_amt),
+                "updated_at": datetime.now().isoformat(),
+            }, f)
+    except:
+        pass
+
 
 def get_portfolio_section():
     """보유종목 현황과 예수금을 Cloudflare Worker 경유로 조회합니다."""
@@ -53,6 +114,14 @@ def get_portfolio_section():
         data = r.json()
         holdings = data.get("holdings", [])
         usd_amt = data.get("buying_power", "0")
+
+        # 예수금 $0 폴백: KIS 직접 조회 (GitHub Actions에서 실행 시)
+        if float(usd_amt or "0") <= 0:
+            usd_amt = _get_deposit_fallback()
+
+        # 유효한 예수금이면 캐시 저장
+        if float(usd_amt or "0") > 0:
+            _save_deposit_cache(usd_amt)
 
         section = "\n━━━━━━━━━━━━━━━━━━\n"
         section += "*💼 포트폴리오 현황*\n"

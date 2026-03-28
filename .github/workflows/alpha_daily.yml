@@ -3,7 +3,16 @@ name: Alpha Daily Investment Report
 on:
   schedule:
     - cron: '0 21 * * 1-5' # 미국장 마감 후 한국 시간 오전 6시 (21:00 UTC)
-  workflow_dispatch: # 수동 실행 가능
+  workflow_dispatch:
+    inputs:
+      force_rescan:
+        description: '캐시 무시하고 강제 재스캔'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   run-alpha:
@@ -44,6 +53,7 @@ jobs:
       continue-on-error: true
       env:
         PYTHONUNBUFFERED: "1"
+        FORCE_RESCAN: ${{ github.event.inputs.force_rescan == 'true' && '1' || '0' }}
       run: |
         timeout 2100 python .agent/tools/alpha_scanner.py
         SCANNER_EXIT=$?

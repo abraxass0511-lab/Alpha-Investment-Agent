@@ -609,8 +609,11 @@ if __name__ == "__main__":
             json.dump(meta, open(metadata_path, "w"))
         sys.exit(0)
 
-    # 장이 닫혀있으면 → 기존 데이터 확인
-    if os.path.exists(metadata_path):
+    # 장이 닫혀있으면 → 기존 데이터 확인 (FORCE_RESCAN=1 이면 강제 재스캔)
+    force_rescan = os.getenv("FORCE_RESCAN", "0") == "1"
+    if force_rescan:
+        print("🔄 FORCE_RESCAN=1 → 캐시 무시, 강제 재스캔")
+    elif os.path.exists(metadata_path):
         try:
             meta = json.load(open(metadata_path))
             if meta.get("success_all") and meta.get("trading_date") == last_trading:

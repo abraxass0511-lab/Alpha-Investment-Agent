@@ -186,9 +186,28 @@ def report_daily_picks():
         return
 
     days = ['월', '화', '수', '목', '금', '토', '일']
-    now = datetime.now()
-    day_name = days[now.weekday()]
-    date_str = now.strftime("%Y-%m-%d")
+    
+    # 데이터 기준일 = 마지막 거래일 (metadata의 timestamp 또는 계산)
+    data_date = None
+    ts = meta.get('timestamp', '')
+    if ts:
+        try:
+            data_date = datetime.fromisoformat(ts).date()
+        except:
+            pass
+    
+    if data_date is None:
+        # 마지막 거래일 계산 (주말/공휴일 제외)
+        from datetime import timezone
+        now_utc = datetime.now(timezone.utc)
+        market_close = now_utc.replace(hour=21, minute=0)
+        d = now_utc if now_utc >= market_close else now_utc - timedelta(days=1)
+        while d.weekday() >= 5:  # 주말이면 금요일로
+            d -= timedelta(days=1)
+        data_date = d.date()
+    
+    day_name = days[data_date.weekday()]
+    date_str = data_date.strftime("%Y-%m-%d")
     
     title = f"📈 *{date_str}({day_name}) 알파 미국주식 정밀 리포트*\n"
     target_info = "📡 *대상: S&P500 종목 전체*\n\n"

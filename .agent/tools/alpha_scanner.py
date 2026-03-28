@@ -453,13 +453,18 @@ def run_scan():
 # 장 상태 판단 & 데이터 재사용 로직
 # ============================================================
 def is_us_market_open():
-    """미국 장 개장 여부 (UTC 기준 13:30~21:00, 월~금)"""
+    """미국 장 개장 여부 — DST 자동 반영 (US/Eastern 9:30~16:00)"""
     from datetime import timezone
-    now = datetime.now(timezone.utc)
-    if now.weekday() >= 5:
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    if now_et.weekday() >= 5:
         return False
-    hour_min = now.hour * 60 + now.minute
-    return 810 <= hour_min <= 1260  # 13:30~21:00 UTC
+    hour_min = now_et.hour * 60 + now_et.minute
+    return 570 <= hour_min <= 960  # 9:30(570) ~ 16:00(960) ET
 
 def get_last_trading_date():
     """마지막 거래일 (UTC 기준) — 주말 + 미국 공휴일 모두 인식"""

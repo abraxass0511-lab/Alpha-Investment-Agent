@@ -206,9 +206,11 @@ const REPLY_KEYBOARD = {
 };
 
 // === KIS API ===
+// 토큰 규칙: 유효기간 24시간, 재발급은 6시간 이후부터 가능
+// 전략: KV에 저장 (24시간 자동 만료) → Worker 재시작해도 불필요한 재발급 방지
 let _cachedToken = null;
 let _tokenIssuedAt = 0;
-const TOKEN_TTL = 23 * 3600 * 1000; // 23시간 (24시간 유효, 1시간 여유)
+const TOKEN_TTL = 23 * 3600 * 1000; // 23시간 (24시간 유효 - 1시간 여유)
 const KV_TOKEN_KEY = "kis_access_token";
 
 async function getKisToken(env, forceRefresh = false) {
@@ -219,7 +221,7 @@ async function getKisToken(env, forceRefresh = false) {
     return _cachedToken;
   }
 
-  // 2차: KV 저장소에서 토큰 로드 (Worker 재시작 후에도 유지)
+  // 2차: KV에서 토큰 로드 (24시간 자동 만료, Worker 재시작 간 유지)
   if (!forceRefresh && env.KV) {
     try {
       const kvData = await env.KV.get(KV_TOKEN_KEY);
@@ -252,13 +254,13 @@ async function getKisToken(env, forceRefresh = false) {
       _cachedToken = data.access_token;
       _tokenIssuedAt = now;
 
-      // KV에 저장 (24시간 TTL)
+      // KV에 저장 (24시간 후 자동 만료 — 영구 저장 아님)
       if (env.KV) {
         try {
           await env.KV.put(KV_TOKEN_KEY, JSON.stringify({
             token: _cachedToken,
             issued_at: _tokenIssuedAt,
-          }), { expirationTtl: 86400 }); // 24시간 후 자동 삭제
+          }), { expirationTtl: 86400 }); // 24시간 후 KV에서 자동 삭제
         } catch {}
       }
 

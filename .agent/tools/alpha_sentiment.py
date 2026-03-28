@@ -44,14 +44,34 @@ def fetch_finnhub_news(symbol):
     # 최근 2일 데이터 수집 (48시간)
     to_date = datetime.now().strftime('%Y-%m-%d')
     from_date = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
+
+    # 1차: 원본 심볼로 시도
     url = f"https://finnhub.io/api/v1/company-news?symbol={symbol}&from={from_date}&to={to_date}&token={FINNHUB_KEY}"
     try:
         r = requests.get(url, timeout=5)
         if r.status_code == 200:
-            return r.json()
-    except:
-        pass
-    return []
+            result = r.json()
+            if result:
+                return result
+
+        # 2차: 하이픈 → 마침표 변환 시도 (BF-B → BF.B)
+        if "-" in symbol:
+            alt_symbol = symbol.replace("-", ".")
+            url2 = f"https://finnhub.io/api/v1/company-news?symbol={alt_symbol}&from={from_date}&to={to_date}&token={FINNHUB_KEY}"
+            r2 = requests.get(url2, timeout=5)
+            if r2.status_code == 200:
+                result2 = r2.json()
+                if result2:
+                    return result2
+
+        # API는 정상이지만 뉴스 0건 → 정상 케이스 (알림 불필요)
+        return []
+
+    except Exception as e:
+        # API 자체 장애 → 텔레그램 알림
+        _alert_sentiment_gap(symbol)
+        print(f"    ⚠️ {symbol} Finnhub 뉴스 API 에러: {e}")
+        return []
 
 def select_quality_news(news_list):
     """양보다 질: 정예 뉴스 5~10개 선정 로직"""
@@ -167,9 +187,18 @@ def analyze_ticker_finnhub(row):
     quality_news = select_quality_news(news)
     
     if not quality_news:
-        # 뉴스 데이터 누락 → 텔레그램 알림
-        _alert_sentiment_gap(symbol)
-        return None
+        # 뉴스 0건 = 중립 (스킵하지 않음 — "무소식이 희소식")
+        print(f"    📭 {symbol} 뉴스 0건 → 중립 0.5 통과")
+        return {
+            "Symbol": symbol,
+            "Name": name,
+            "Price": price,
+            "Momentum(%)": momentum,
+            "Sentiment": 0.5,
+            "ROE(%)": roe,
+            "Status": "HOLD (관망/대기)",
+            "Reason": "뉴스 없음 — 중립 점수 (📭 No News)",
+        }
     
     headlines = [item['title'] for item in quality_news]
     premium_found = any(item['score'] >= 10 for item in quality_news)

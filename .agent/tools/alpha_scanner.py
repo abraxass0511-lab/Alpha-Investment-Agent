@@ -617,9 +617,35 @@ if __name__ == "__main__":
         try:
             meta = json.load(open(metadata_path))
             if meta.get("success_all") and meta.get("trading_date") == last_trading:
-                print(f"✅ {last_trading} 데이터 이미 존재. 재스캔 불필요.")
-                print(f"   기존 결과를 그대로 사용합니다.")
-                sys.exit(0)
+                # ★ 캐시 무결성 검사: 필수 컬럼 누락 시 자동 재스캔
+                scan_csv = "output_reports/daily_scan_latest.csv"
+                data_ok = True
+                if os.path.exists(scan_csv):
+                    try:
+                        check_df = pd.read_csv(scan_csv)
+                        required_cols = ["MarketCap_M", "MA50", "Surprise(%)", "EPS_Growth(%)"]
+                        for col in required_cols:
+                            if col not in check_df.columns:
+                                print(f"   ⚠️ 필수 컬럼 '{col}' 누락 → 자동 재스캔")
+                                data_ok = False
+                                break
+                            # 전부 0이거나 NaN이면 누락으로 간주
+                            if check_df[col].fillna(0).eq(0).all():
+                                print(f"   ⚠️ '{col}' 전체 0% → 데이터 누락, 자동 재스캔")
+                                data_ok = False
+                                break
+                    except Exception as e:
+                        print(f"   ⚠️ 캐시 검사 에러: {e} → 재스캔")
+                        data_ok = False
+                else:
+                    data_ok = False
+                
+                if data_ok:
+                    print(f"✅ {last_trading} 데이터 이미 존재. 재스캔 불필요.")
+                    print(f"   기존 결과를 그대로 사용합니다.")
+                    sys.exit(0)
+                else:
+                    print(f"🔄 {last_trading} 캐시 불완전 → 강제 재스캔")
         except Exception:
             pass
 

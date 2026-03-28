@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-28 18:01",
+  "timestamp": "2026-03-28 18:08",
   "sell": [],
   "buy": [
     {
@@ -13,7 +13,7 @@
       "symbol": "FIX",
       "name": "Comfort Systems USA",
       "price": "1366.77",
-      "reason": "목표가 상향, 장기 수익률 양호, 산업 전반 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",
+      "reason": "목표가 상향 및 장기 수익률 긍정적 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 344.77%",
       "action": "BUY"
     },
     {
@@ -34,7 +34,7 @@
       "symbol": "JBL",
       "name": "Jabil",
       "price": "261.1",
-      "reason": "성장 가능성, 목표가 근접, 기술주 하락 상쇄 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 100.26%",
+      "reason": "성장 가능성, 목표가 근접, PLXS 상승 등 긍정적 신호 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 100.26%",
       "action": "BUY"
     }
   ],

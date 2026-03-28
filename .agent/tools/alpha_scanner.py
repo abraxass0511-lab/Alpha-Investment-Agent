@@ -401,23 +401,38 @@ def stage4_finnhub_earnings(candidates):
         if data and isinstance(data, list) and len(data) > 0:
             surprise_pct = data[0].get("surprisePercent", 0) or 0
 
+            # EPS YoY Growth 계산 (최근 분기 vs 전년도 동분기)
             if len(data) >= 5:
-                current_actual = data[0].get("actual", 0) or 0
-                yoy_actual = data[4].get("actual", 0) or 0
-                if yoy_actual != 0 and current_actual != 0:
+                current_actual = data[0].get("actual")
+                yoy_actual = data[4].get("actual")
+                if current_actual is not None and yoy_actual is not None and yoy_actual != 0:
                     eps_growth = round((current_actual - yoy_actual) / abs(yoy_actual), 4)
 
-        # 2차: Yahoo 백업 (Finnhub 데이터 없을 때)
-        if surprise_pct is None:
-            ydata = yahoo_backup_earnings(sym)
-            if ydata:
-                surprise_pct = ydata.get("surprisePercent", 0)
-                yahoo_count += 1
-                print(f"    🔄 {sym} Yahoo 어닝 백업 사용")
-            else:
-                surprise_pct = 0
-                alert_data_gap(sym, "4단계(어닝)")
-                print(f"    ⚠️ {sym} → 어닝 데이터 없음 (Finnhub+Yahoo)")
+        # 2차: Yahoo 백업 (Finnhub 데이터 없거나 Growth 계산 실패 시)
+        if surprise_pct is None or (surprise_pct < 10 and eps_growth == 0):
+            try:
+                import yfinance as yf
+                tk = yf.Ticker(sym)
+                info = tk.info
+                # Yahoo 에서 earningsGrowth (YoY EPS 성장률) 직접 제공
+                yf_growth = info.get("earningsGrowth")  # 예: 0.25 = 25%
+                if yf_growth is not None:
+                    eps_growth = round(yf_growth, 4)
+                # surprise가 없으면 Yahoo에서도 가져오기
+                if surprise_pct is None:
+                    ydata = yahoo_backup_earnings(sym)
+                    if ydata:
+                        surprise_pct = ydata.get("surprisePercent", 0)
+                        yahoo_count += 1
+                        print(f"    🔄 {sym} Yahoo 어닝 백업 사용")
+                    else:
+                        surprise_pct = 0
+                        alert_data_gap(sym, "4단계(어닝)")
+                        print(f"    ⚠️ {sym} → 어닝 데이터 없음 (Finnhub+Yahoo)")
+            except Exception as e:
+                print(f"    ⚠️ {sym} Yahoo Growth 백업 에러: {e}")
+                if surprise_pct is None:
+                    surprise_pct = 0
 
         # 통과 기준: Surprise ≥ 10% OR EPS Growth ≥ 20%
         if surprise_pct >= 10 or eps_growth >= 0.20:

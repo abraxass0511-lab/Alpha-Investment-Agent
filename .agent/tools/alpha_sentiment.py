@@ -197,6 +197,10 @@ def analyze_ticker_finnhub(row):
             "Momentum(%)": momentum,
             "Sentiment": 0.70,
             "ROE(%)": roe,
+            "MarketCap_M": row.get('MarketCap_M', 0),
+            "MA50": row.get('MA50', 0),
+            "Surprise(%)": row.get('Surprise(%)', 0),
+            "EPS_Growth(%)": row.get('EPS_Growth(%)', 0),
             "Status": "BUY (매수 승인 대기)",
             "Reason": "뉴스 없음 — 펀더멘털 4단계 검증 통과 (📭 No News)",
         }
@@ -246,6 +250,10 @@ def analyze_ticker_finnhub(row):
         "Momentum(%)": momentum,  # 보고서용 표시명
         "Sentiment": final_score,
         "ROE(%)": roe,            # API 원본
+        "MarketCap_M": row.get('MarketCap_M', 0),
+        "MA50": row.get('MA50', 0),
+        "Surprise(%)": row.get('Surprise(%)', 0),
+        "EPS_Growth(%)": row.get('EPS_Growth(%)', 0),
         "Status": status,
         "Reason": reason
     }

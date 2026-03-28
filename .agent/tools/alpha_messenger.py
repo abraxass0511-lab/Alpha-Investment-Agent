@@ -382,7 +382,8 @@ def report_daily_picks():
         print(f"⚠️ 휴장 안내 생성 에러: {e}")
 
     # 휴장일 캘린더 업데이트 리마인더 (2027년 12월)
-    if now.year == 2027 and now.month == 12:
+    _now = datetime.now()
+    if _now.year == 2027 and _now.month == 12:
         footer += "\n\n🚨 *[관리자 알림] 2028년도 미국장 휴장일 달력 업데이트가 필요합니다! 저(알파)에게 갱신을 요청해 주세요.*"
 
     message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + ai_insight + footer + "\n\n" + portfolio_section

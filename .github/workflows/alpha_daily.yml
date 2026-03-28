@@ -9,6 +9,8 @@ jobs:
   run-alpha:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
     
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

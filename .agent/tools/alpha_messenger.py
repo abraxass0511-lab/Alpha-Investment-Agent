@@ -205,7 +205,7 @@ def report_daily_picks():
     s6 = meta.get('step6', 0)
 
     summary_table = "\n*📊 필터 현황 요약 (통과 기준)*\n"
-    summary_table += f"| 1+2단계 | 체급+내실 | {s1}건 | 시총$10B+ ROE15%+ | Finnhub |\n"
+    summary_table += f"| 1+2단계 | 체급+내실 | {s12}건 | 시총$10B+ ROE15%+ | Finnhub |\n"
     summary_table += f"| 3단계 | 에너지 | {s3}건 | 가격 > 50MA | Finnhub |\n"
     summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | Finnhub |\n"
     summary_table += f"| 5단계 | 심리 | {s5}건 | 점수 0.7+ | Finnhub+Gemini |\n"

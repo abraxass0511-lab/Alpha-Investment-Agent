@@ -121,7 +121,6 @@ def report_daily_picks():
     now_utc_str = datetime.now().strftime("%Y-%m-%d")
     
     if now_utc_str == "2026-03-27": # 토요일 KST (UTC 금요일)
-        import os
         if not os.path.exists("output_reports"): os.makedirs("output_reports")
         try:
             df_test = pd.read_csv(picks_file)

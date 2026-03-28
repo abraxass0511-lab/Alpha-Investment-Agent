@@ -491,8 +491,7 @@ async function handleTodayScan(env) {
     const scanTime = (meta.timestamp || "N/A").substring(0, 16);
     const step6 = meta.step6 || 0;
     let msg = "\u{1F50D} *\uC624\uB298\uC790 \uC2A4\uCE94 \uACB0\uACFC*\n\n\u{1F4C5} \uC2A4\uCE94 \uC2DC\uAC01: " + scanTime + "\n\n";
-    msg += "`1\uB2E8\uACC4` \uCCB4\uAE09   : " + (meta.total || 503) + " \u2192 *" + (meta.step1 || 0) + "\uAC74*\n";
-    msg += "`2\uB2E8\uACC4` \uB0B4\uC2E4   : \u2192 *" + (meta.step2 || 0) + "\uAC74*\n";
+    msg += "`1+2\uB2E8\uACC4` \uCCB4\uAE09+\uB0B4\uC2E4 : " + (meta.total || 503) + " \u2192 *" + (meta.step12 || meta.step1 || 0) + "\uAC74*\n";
     msg += "`3\uB2E8\uACC4` \uC5D0\uB108\uC9C0 : \u2192 *" + (meta.step3 || 0) + "\uAC74*\n";
     msg += "`4\uB2E8\uACC4` \uC131\uC7A5   : \u2192 *" + (meta.step4 || 0) + "\uAC74*\n";
     msg += "`5\uB2E8\uACC4` \uC2EC\uB9AC   : \u2192 *" + (meta.step5 || 0) + "\uAC74*\n";

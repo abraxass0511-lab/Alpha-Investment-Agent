@@ -606,8 +606,7 @@ async function handleTodayScan(env) {
     const step6 = meta.step6 || 0;
 
     let msg = "\ud83d\udd0d *\uc624\ub298\uc790 \uc2a4\uce94 \uacb0\uacfc*\n\n\ud83d\udcc5 \uc2a4\uce94 \uc2dc\uac01: " + scanTime + "\n\n";
-    msg += "`1\ub2e8\uacc4` \uccb4\uae09   : " + (meta.total || 503) + " \u2192 *" + (meta.step1 || 0) + "\uac74*\n";
-    msg += "`2\ub2e8\uacc4` \ub0b4\uc2e4   : \u2192 *" + (meta.step2 || 0) + "\uac74*\n";
+    msg += "`1+2\ub2e8\uacc4` \uccb4\uae09+\ub0b4\uc2e4 : " + (meta.total || 503) + " \u2192 *" + (meta.step12 || meta.step1 || 0) + "\uac74*\n";
     msg += "`3\ub2e8\uacc4` \uc5d0\ub108\uc9c0 : \u2192 *" + (meta.step3 || 0) + "\uac74*\n";
     msg += "`4\ub2e8\uacc4` \uc131\uc7a5   : \u2192 *" + (meta.step4 || 0) + "\uac74*\n";
     msg += "`5\ub2e8\uacc4` \uc2ec\ub9ac   : \u2192 *" + (meta.step5 || 0) + "\uac74*\n";

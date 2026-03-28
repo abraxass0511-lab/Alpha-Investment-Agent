@@ -44,12 +44,20 @@ jobs:
       env:
         PYTHONUNBUFFERED: "1"
       run: |
-        timeout 2400 python .agent/tools/alpha_scanner.py || echo "⚠️ 스캐너 에러 또는 타임아웃"
+        timeout 2100 python .agent/tools/alpha_scanner.py
+        SCANNER_EXIT=$?
+
+        if [ $SCANNER_EXIT -ne 0 ]; then
+          echo "⚠️ 스캐너 종료코드: $SCANNER_EXIT (124=타임아웃, 1=에러)"
+        fi
 
         # metadata.json 성공 여부 확인
         if [ -f "output_reports/metadata.json" ]; then
           SUCCESS=$(python -c "import json; m=json.load(open('output_reports/metadata.json')); print(m.get('success_all', False))" 2>/dev/null || echo "False")
         else
+          # metadata.json이 없으면 실패 metadata 생성
+          mkdir -p output_reports
+          echo '{"success_all": false, "reason": "scanner_failed_or_timeout"}' > output_reports/metadata.json
           SUCCESS="False"
         fi
         echo "scan_success=$SUCCESS" >> $GITHUB_OUTPUT

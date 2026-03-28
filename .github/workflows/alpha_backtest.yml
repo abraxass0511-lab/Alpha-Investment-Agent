@@ -1,0 +1,42 @@
+name: Alpha Backtest - 7Y Strategy Validation
+
+on:
+  workflow_dispatch:  # 수동 실행만
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install numpy
+
+    - name: Run Backtest
+      env:
+        PYTHONUNBUFFERED: "1"
+      run: python .agent/tools/alpha_backtest.py
+
+    - name: Save results to repo
+      if: always()
+      run: |
+        git config user.name "Alpha Bot"
+        git config user.email "alpha-bot@users.noreply.github.com"
+        git add output_reports/backtest_*.csv output_reports/backtest_*.json -f 2>/dev/null || true
+        git diff --cached --quiet || git commit -m "📊 backtest $(date -u +%Y-%m-%d)"
+        git push || (git pull --rebase && git push)

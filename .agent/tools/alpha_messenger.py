@@ -166,27 +166,24 @@ def report_daily_picks():
         print("🚨 데이터 수집 미완료. 리포트를 보내지 않습니다. 재시도를 대기합니다.")
         return
 
-    # 2-1. FMP 쿼터 이슈 또는 4단계 0건 알림
+    # 2-1. 4단계 0건 알림 (정상 스캔이지만 통과 종목 없는 경우)
     s4 = meta.get("step4", meta.get("step12", 0))
-    fmp_quota = meta.get("fmp_quota_issue", False)
-    fmp_429s = meta.get("fmp_429_count", 0)
     
-    if fmp_quota or (s4 == 0 and meta.get("step3", 0) > 0):
-        quota_msg = f"""⚠️ *알파 스캔 알림 (FMP 쿼터 이슈)*
+    if s4 == 0 and meta.get("step3", 0) > 0:
+        quota_msg = f"""⚠️ *알파 스캔 알림 (4단계 통과 0건)*
 
-📊 *스캔은 완료됐으나 FMP API 쿼터 부족으로 4단계 통과 0건*
+📊 *스캔은 정상 완료됐으나 4단계 통과 종목이 없습니다.*
 
-• 1+2단계(체급+내실): {meta.get('step12', 0)}건 통과 (Finnhub)
-• 3단계(에너지): {meta.get('step3', 0)}건 통과 (Finnhub)
-• 4단계(성장): *0건* (FMP 429 에러 {fmp_429s}회)
-• FMP 사용: {meta.get('fmp_calls', 0)}/{250}콜
+• 1+2단계(체급+내실): {meta.get('step12', 0)}건 통과
+• 3단계(에너지): {meta.get('step3', 0)}건 통과
+• 4단계(성장): *0건 통과*
+• Finnhub 총 {meta.get('finnhub_calls', 0)}콜
 
-💡 *원인*: 같은 날 여러 번 실행으로 FMP 일일 쿼터(250콜) 소진
-🔄 *조치*: 내일 KST 오전 9시(UTC 자정) FMP 리셋 후 정상 스캔 예정
-⏱️ 소요시간: {meta.get('elapsed_min', 0)}분 | 엔진: {meta.get('engine', 'V4')}"""
+💡 현재 시장에서 성장 기준(Surprise≥10% or Growth≥20%)을 충족하는 종목이 없습니다.
+⏱️ 소요시간: {meta.get('elapsed_min', 0)}분 | 엔진: {meta.get('engine', 'V5')}"""
         
         send_telegram_message(quota_msg)
-        print("⚠️ FMP 쿼터 이슈 알림 발송 완료")
+        print("⚠️ 4단계 0건 알림 발송 완료")
         return
 
     days = ['월', '화', '수', '목', '금', '토', '일']
@@ -200,9 +197,8 @@ def report_daily_picks():
     # ── 포트폴리오 현황 (최상단 배치) ──
     portfolio_section = get_portfolio_section()
 
-    # V4 메타데이터 호환: step12 또는 step1/step2
+    # V5 메타데이터 호환
     s12 = meta.get('step12', 0)
-    s1 = meta.get('step1', s12)  # V4는 step12, V3는 step1
     s3 = meta.get('step3', 0)
     s4 = meta.get('step4', 0)
     s5 = meta.get('step5', 0)
@@ -338,7 +334,7 @@ def report_daily_picks():
 
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
     if meta.get("success_all", False):
-        footer = "📝 _비고 : FMP에서 모든 정보 받음_"
+        footer = "📝 _비고 : Finnhub에서 모든 정보 수집 완료_"
     else:
         total = meta.get("total", 503)
         collected = meta.get("step1", 0) + (total - meta.get("step1", 0))  # 수집 시도 수

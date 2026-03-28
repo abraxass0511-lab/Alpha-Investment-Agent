@@ -1,16 +1,15 @@
 """
-Alpha Scanner V4 — Finnhub + FMP 하이브리드 엔진
+Alpha Scanner V5 — Finnhub Only Engine (FMP 완전 제거)
 
 파이프라인:
   Wikipedia → S&P 500 목록
-  [1+2단계] Finnhub /metric → 시총 $10B+ & ROE 15%+  (동시 처리, 일일제한 없음)
-  [3단계]   Finnhub /candle → 현재가 > 50MA
-  [4단계]   FMP /earnings   → 어닝 서프라이즈 ≥10% OR EPS Growth ≥20%
-  [5단계]   별도 alpha_sentiment.py에서 처리 (Finnhub News + VADER + Gemini)
-  [6단계]   FMP /price-change → 12-1 모멘텀 Top 5
+  [1+2단계] Finnhub /metric     → 시총 $10B+ & ROE 15%+  (1콜로 동시 처리)
+  [3+6단계] Finnhub /candle     → 50MA 필터 + 12-1 모멘텀 사전 계산 (1콜로 동시 처리)
+  [4단계]   Finnhub /earnings   → Surprise ≥10% OR EPS Growth ≥20%
+  [5단계]   별도 alpha_sentiment.py (Finnhub News + VADER + Gemini)
+  [6단계]   3단계에서 이미 계산한 12-1 모멘텀으로 Top 5 소팅 (추가 콜 0)
 
-Finnhub: 분당 60콜, 일일 제한 없음 (1~3단계 담당)
-FMP: 일일 250콜 (4, 6단계에만 사용 → ~85콜 소모)
+Finnhub: 분당 60콜, 일일 제한 없음 — 쿼터 걱정 완전 제거!
 """
 
 import os
@@ -30,14 +29,10 @@ SCAN_TIMEOUT = 35 * 60  # 35분
 SCAN_START = time.time()
 
 load_dotenv()
-FMP_KEY = os.getenv("FMP_API_KEY")
 FINNHUB_KEY = os.getenv("FINNHUB_API_KEY")
 
-# 쿼터 추적
-FMP_DAILY_LIMIT = 250
-fmp_call_count = 0
+# 콜 추적
 finnhub_call_count = 0
-fmp_429_count = 0  # FMP 429 에러 카운트
 
 
 def check_timeout():
@@ -82,39 +77,6 @@ def finnhub_request(endpoint, params=None, timeout=10):
         except Exception as e:
             print(f"    ⚠️ Finnhub 에러: {e}")
             time.sleep(3)
-    return None
-
-
-# ============================================================
-# FMP API 호출 (일일 250콜 추적)
-# ============================================================
-def fmp_request(url, timeout=15, max_retries=3):
-    """FMP API 호출 — 쿼터 추적, 429 재시도"""
-    global fmp_call_count, fmp_429_count
-
-    for attempt in range(max_retries):
-        if check_timeout():
-            return None
-        remaining = FMP_DAILY_LIMIT - fmp_call_count
-        if remaining <= 0:
-            print("    🚨 FMP 일일 쿼터 소진!")
-            return None
-        try:
-            fmp_call_count += 1
-            r = requests.get(url, timeout=timeout)
-            if r.status_code == 200:
-                return r
-            if r.status_code == 429:
-                fmp_429_count += 1
-                wait = min(30 * (attempt + 1), 60)
-                print(f"    ⏳ FMP 429 (#{fmp_429_count}) → {wait}초 대기...")
-                time.sleep(wait)
-                continue
-            print(f"    ⚠️ FMP HTTP {r.status_code}")
-            time.sleep(10)
-        except Exception as e:
-            print(f"    ⚠️ FMP 에러({e})")
-            time.sleep(5)
     return None
 
 
@@ -197,15 +159,16 @@ def stage12_finnhub_metric(tickers, name_map):
 
 
 # ============================================================
-# [3단계] Finnhub /candle → 현재가 > 50MA
+# [3+6단계] Finnhub /candle → 50MA 필터 + 12-1 모멘텀 사전 계산
 # ============================================================
 def stage3_finnhub_candle(candidates):
     """
-    Finnhub /stock/candle 로 50일 이동평균 확인
-    ~150종목 × 1.1초 = ~2.8분
+    Finnhub /stock/candle 로 252일(1년) 캔들 데이터 수집
+    → 50MA 필터 (3단계) + 12-1 모멘텀 사전 계산 (6단계용)
+    1콜로 2가지 동시 처리!
     """
     now = int(time.time())
-    three_months_ago = now - (90 * 24 * 60 * 60)  # 90일 전
+    one_year_ago = now - (365 * 24 * 60 * 60)
 
     passed = []
 
@@ -217,30 +180,36 @@ def stage3_finnhub_candle(candidates):
         data = finnhub_request("/stock/candle", {
             "symbol": sym,
             "resolution": "D",
-            "from": three_months_ago,
+            "from": one_year_ago,
             "to": now,
         })
 
         if data and data.get("s") == "ok":
             closes = data.get("c", [])
+
             if len(closes) >= 50:
                 current_price = closes[-1]
                 ma50 = sum(closes[-50:]) / 50
+
+                # [3단계] 50MA 필터
                 if current_price > ma50:
-                    momentum = round(((current_price - ma50) / ma50) * 100, 2)
+                    ma_momentum = round(((current_price - ma50) / ma50) * 100, 2)
                     item["Price"] = round(current_price, 2)
                     item["MA50"] = round(ma50, 2)
-                    item["Momentum(%)"] = momentum
-                    passed.append(item)
-            elif len(closes) > 0:
-                # 50일 미만이지만 데이터 있으면 전체 평균으로 대체
-                current_price = closes[-1]
-                ma = sum(closes) / len(closes)
-                if current_price > ma:
-                    momentum = round(((current_price - ma) / ma) * 100, 2)
-                    item["Price"] = round(current_price, 2)
-                    item["MA50"] = round(ma, 2)
-                    item["Momentum(%)"] = momentum
+                    item["MA_Momentum(%)"] = ma_momentum
+
+                    # [6단계 사전계산] 12-1 모멘텀
+                    if len(closes) > 21:
+                        price_t1 = closes[-22]  # ~1개월 전
+                        price_t12 = closes[0]   # ~12개월 전
+                        if price_t12 > 0:
+                            mom_12_1 = round((price_t1 / price_t12) - 1, 4)
+                        else:
+                            mom_12_1 = 0
+                    else:
+                        mom_12_1 = 0
+
+                    item["Momentum_12_1"] = mom_12_1
                     passed.append(item)
 
         if (i + 1) % 30 == 0 or i == len(candidates) - 1:
@@ -252,71 +221,56 @@ def stage3_finnhub_candle(candidates):
 
 
 # ============================================================
-# [4단계] FMP /earnings → 어닝 서프라이즈 + EPS Growth
+# [4단계] Finnhub /earnings → 어닝 서프라이즈 + EPS Growth
 # ============================================================
-def stage4_fmp_growth(candidates):
+def stage4_finnhub_earnings(candidates):
     """
-    FMP API로 성장성 검증
-    ~70종목 × 2콜 = ~140콜 (쿼터 여유)
+    Finnhub /stock/earnings 로 어닝 서프라이즈 + YoY EPS 성장률 검증
+    1콜로 서프라이즈%와 EPS Growth 동시 확인!
     """
-    import concurrent.futures
-
     passed = []
-    BATCH_SIZE = 5
 
-    def _check(item):
-        sym = item["Symbol"]
-        # Surprise 체크
-        url_s = f"https://financialmodelingprep.com/api/v3/earnings-surprises/{sym}?apikey={FMP_KEY}"
-        s_res = fmp_request(url_s, timeout=10)
-        time.sleep(1)
-
-        # Growth 체크
-        url_g = f"https://financialmodelingprep.com/api/v3/financial-growth/{sym}?period=quarter&limit=1&apikey={FMP_KEY}"
-        g_res = fmp_request(url_g, timeout=10)
-
-        if s_res and g_res:
-            s_data = s_res.json()
-            g_data = g_res.json()
-            if isinstance(s_data, list) and len(s_data) > 0 and isinstance(g_data, list) and len(g_data) > 0:
-                surprise = s_data[0].get('percentageEarningsSurprise', 0) or 0
-                eps_growth = g_data[0].get('epsgrowth', 0) or 0
-                if surprise >= 10 or eps_growth >= 0.20:
-                    return item, True, f"Surprise: {round(surprise,1)}%, Growth: {round(eps_growth*100,1)}%"
-                return item, False, f"Surprise: {round(surprise,1)}%, Growth: {round(eps_growth*100,1)}%"
-        return item, False, "No Data"
-
-    # 쿼터 체크
-    needed = len(candidates) * 2
-    remaining = FMP_DAILY_LIMIT - fmp_call_count
-    if needed > remaining:
-        max_stocks = remaining // 2
-        print(f"   ⚠️ FMP 쿼터 제한! {len(candidates)}종목 중 상위 {max_stocks}종목만 검증")
-        candidates = sorted(candidates, key=lambda x: x.get("Momentum(%)", 0), reverse=True)[:max_stocks]
-
-    for batch_start in range(0, len(candidates), BATCH_SIZE):
+    for i, item in enumerate(candidates):
         if check_timeout():
             break
-        batch = candidates[batch_start:batch_start + BATCH_SIZE]
-        batch_end = min(batch_start + BATCH_SIZE, len(candidates))
-        print(f"   🔍 배치 {batch_start+1}~{batch_end}/{len(candidates)} 검증 중...")
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=BATCH_SIZE) as executor:
-            futures = {executor.submit(_check, item): item for item in batch}
-            for future in concurrent.futures.as_completed(futures, timeout=120):
-                try:
-                    item, ok, reason = future.result()
-                    if ok:
-                        item["GrowthReason"] = reason
-                        passed.append(item)
-                        print(f"    ✅ {item['Symbol']} → {reason}")
-                    else:
-                        print(f"    ❌ {item['Symbol']} → {reason}")
-                except Exception as e:
-                    print(f"    ⚠️ 에러: {e}")
+        sym = item["Symbol"]
+        data = finnhub_request("/stock/earnings", {"symbol": sym, "limit": 8})
 
-        if batch_end < len(candidates):
-            time.sleep(15)
+        if data and isinstance(data, list) and len(data) > 0:
+            # 가장 최근 실적
+            latest = data[0]
+            actual = latest.get("actual")
+            estimate = latest.get("estimate")
+            surprise_pct = latest.get("surprisePercent", 0) or 0
+
+            # EPS Growth: 올해 vs 작년 동분기 비교
+            eps_growth = 0
+            if len(data) >= 5:
+                # data[0] = 최근, data[4] = 4분기 전 (작년 동분기)
+                current_actual = data[0].get("actual", 0) or 0
+                yoy_actual = data[4].get("actual", 0) or 0
+                if yoy_actual != 0 and current_actual != 0:
+                    eps_growth = round((current_actual - yoy_actual) / abs(yoy_actual), 4)
+
+            # 통과 기준: Surprise ≥ 10% OR EPS Growth ≥ 20%
+            if surprise_pct >= 10 or eps_growth >= 0.20:
+                reason = f"Surprise: {round(surprise_pct, 1)}%, Growth: {round(eps_growth * 100, 1)}%"
+                item["GrowthReason"] = reason
+                item["Surprise(%)"] = round(surprise_pct, 1)
+                item["EPS_Growth(%)"] = round(eps_growth * 100, 1)
+                passed.append(item)
+                print(f"    ✅ {sym} → {reason}")
+            else:
+                print(f"    ❌ {sym} → Surprise: {round(surprise_pct, 1)}%, Growth: {round(eps_growth * 100, 1)}%")
+        else:
+            print(f"    ⚠️ {sym} → 어닝 데이터 없음")
+
+        if (i + 1) % 20 == 0 or i == len(candidates) - 1:
+            elapsed = round((time.time() - SCAN_START) / 60, 1)
+            print(f"   📡 {i+1}/{len(candidates)} | 통과: {len(passed)} | ⏱️ {elapsed}분")
+
+        time.sleep(1.1)
 
     return passed
 
@@ -325,8 +279,7 @@ def stage4_fmp_growth(candidates):
 # 메인 파이프라인
 # ============================================================
 def run_scan():
-    global fmp_call_count, finnhub_call_count
-    fmp_call_count = 0
+    global finnhub_call_count
     finnhub_call_count = 0
 
     # S&P 500 목록
@@ -339,9 +292,8 @@ def run_scan():
     name_map = {item["symbol"]: item["name"] for item in sp500}
     tickers = [item["symbol"] for item in sp500]
 
-    print(f"🚀 [Alpha Scanner V4] Finnhub + FMP 하이브리드 엔진 가동")
-    print(f"   대상: {total}종목")
-    print(f"   Finnhub: 분당60콜/일일무제한 | FMP: {FMP_DAILY_LIMIT}콜/일")
+    print(f"🚀 [Alpha Scanner V5] Finnhub Only Engine 가동")
+    print(f"   대상: {total}종목 | 쿼터: 무제한")
 
     # ========================================
     # [1+2단계] 체급 + 내실 — Finnhub /metric
@@ -352,13 +304,13 @@ def run_scan():
 
     stage12 = stage12_finnhub_metric(tickers, name_map)
     c12 = len(stage12)
-    print(f"\n✅ [1+2단계] {c12}건 통과 | Finnhub {finnhub_call_count}콜 사용")
+    print(f"\n✅ [1+2단계] {c12}건 통과 | Finnhub {finnhub_call_count}콜")
 
     # ========================================
-    # [3단계] 에너지 — Finnhub /candle
+    # [3+6단계] 에너지 + 모멘텀 사전계산 — Finnhub /candle
     # ========================================
     print(f"\n{'='*55}")
-    print(f"📊 [3단계] 에너지(가격 > 50MA) — Finnhub /candle")
+    print(f"📊 [3+6단계] 에너지(50MA) + 12-1 모멘텀 사전계산 — Finnhub /candle")
     print(f"{'='*55}")
 
     stage3 = stage3_finnhub_candle(stage12)
@@ -366,15 +318,15 @@ def run_scan():
     print(f"\n✅ [3단계] {c3}건 통과 | Finnhub 총 {finnhub_call_count}콜")
 
     # ========================================
-    # [4단계] 성장 — FMP /earnings
+    # [4단계] 성장 — Finnhub /earnings
     # ========================================
     print(f"\n{'='*55}")
-    print(f"📊 [4단계] 성장(Surprise/EPS) — FMP /earnings")
+    print(f"📊 [4단계] 성장(Surprise/EPS Growth) — Finnhub /earnings")
     print(f"{'='*55}")
 
-    stage4 = stage4_fmp_growth(stage3)
+    stage4 = stage4_finnhub_earnings(stage3)
     c4 = len(stage4)
-    print(f"\n✅ [4단계] {c4}건 통과 | FMP {fmp_call_count}/{FMP_DAILY_LIMIT}콜")
+    print(f"\n✅ [4단계] {c4}건 통과 | Finnhub 총 {finnhub_call_count}콜")
 
     # ========================================
     # 결과 저장
@@ -386,29 +338,22 @@ def run_scan():
 
     elapsed_min = round((time.time() - SCAN_START) / 60, 1)
 
-    # FMP 쿼터 이슈 감지
-    fmp_quota_issue = fmp_429_count >= 5 or (c4 == 0 and c3 > 0)
-
     with open("output_reports/metadata.json", "w") as f:
         json.dump({
             "total": total,
             "success_all": True,
             "step12": c12, "step3": c3, "step4": c4,
             "timestamp": datetime.now().isoformat(),
-            "fmp_calls": fmp_call_count,
-            "fmp_remaining": FMP_DAILY_LIMIT - fmp_call_count,
-            "fmp_429_count": fmp_429_count,
-            "fmp_quota_issue": fmp_quota_issue,
             "finnhub_calls": finnhub_call_count,
             "elapsed_min": elapsed_min,
-            "engine": "Finnhub + FMP Hybrid V4",
+            "engine": "Finnhub Only V5",
         }, f)
 
     print(f"\n{'='*55}")
-    print(f"✅ [Alpha Scanner V4] 최종 결과")
+    print(f"✅ [Alpha Scanner V5] 최종 결과")
     print(f"   Total: {total}종목")
     print(f"   1+2단계(체급+내실): {c12} → 3단계(에너지): {c3} → 4단계(성장): {c4}")
-    print(f"   📡 Finnhub: {finnhub_call_count}콜 | FMP: {fmp_call_count}/{FMP_DAILY_LIMIT}콜")
+    print(f"   📡 Finnhub 총 {finnhub_call_count}콜 (쿼터: 무제한)")
     print(f"   ⏱️ 소요시간: {elapsed_min}분")
     print(f"{'='*55}")
 

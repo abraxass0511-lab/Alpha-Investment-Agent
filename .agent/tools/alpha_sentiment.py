@@ -199,26 +199,31 @@ def analyze_ticker_finnhub(row):
 def calculate_12_1_momentum(symbol):
     """
     Step 6: Calculate 12-1 Month Momentum
-    FMP Historical Price 전용 (Yahoo 제거)
+    Finnhub /stock/candle 사용 (FMP 완전 제거)
     Formula: (Price_{t-1} / Price_{t-12}) - 1
     """
-    FMP_KEY = os.getenv("FMP_API_KEY")
+    FKEY = os.getenv("FINNHUB_API_KEY")
+    if not FKEY:
+        return 0.0
 
-    if FMP_KEY:
-        try:
-            url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}?timeseries=252&apikey={FMP_KEY}"
-            r = requests.get(url, timeout=10)
-            if r.status_code == 200:
-                data = r.json()
-                prices = data.get('historical', [])
-                if len(prices) > 21:
-                    price_t_minus_1 = prices[21]['close']   # 약 1개월 전
-                    price_t_minus_12 = prices[-1]['close']   # 약 12개월 전
-                    momentum = (price_t_minus_1 / price_t_minus_12) - 1
-                    return round(momentum, 4)
-            print(f"    ⚠️ FMP 6단계 {r.status_code} ({symbol})")
-        except Exception as e:
-            print(f"    ⚠️ FMP 6단계 에러({e}) ({symbol})")
+    try:
+        now = int(time.time())
+        one_year_ago = now - (365 * 24 * 60 * 60)
+        url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}&resolution=D&from={one_year_ago}&to={now}&token={FKEY}"
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("s") == "ok":
+                closes = data.get("c", [])
+                if len(closes) > 21:
+                    price_t1 = closes[-22]   # ~1개월 전
+                    price_t12 = closes[0]    # ~12개월 전
+                    if price_t12 > 0:
+                        momentum = (price_t1 / price_t12) - 1
+                        return round(momentum, 4)
+        print(f"    ⚠️ Finnhub 6단계 {r.status_code} ({symbol})")
+    except Exception as e:
+        print(f"    ⚠️ Finnhub 6단계 에러({e}) ({symbol})")
 
     return 0.0
 

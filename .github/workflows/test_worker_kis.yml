@@ -76,25 +76,25 @@ jobs:
           echo "$BODY"
         fi
 
-    - name: Test 4 - FMP API 직접 호출
+    - name: Test 4 - Finnhub API 직접 호출
       env:
-        FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
       run: |
-        echo "=== GHA(미국) → FMP API 직접 테스트 ==="
+        echo "=== GHA(미국) → Finnhub API 직접 테스트 ==="
         
         RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
-          "https://financialmodelingprep.com/api/v3/quote/AAPL?apikey=${FMP_API_KEY}")
+          "https://finnhub.io/api/v1/stock/metric?symbol=AAPL&metric=all&token=${FINNHUB_API_KEY}")
         HTTP_CODE=$(echo "$RESPONSE" | tail -1 | sed 's/HTTP_CODE://')
         BODY=$(echo "$RESPONSE" | sed '$d')
         
         echo "HTTP 상태: $HTTP_CODE"
-        echo "AAPL 시세:"
+        echo "AAPL metric 응답:"
         echo "$BODY" | head -10
         
         if [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ FMP API 호출 성공"
+          echo "✅ Finnhub API 호출 성공"
         else
-          echo "❌ FMP API 호출 실패"
+          echo "❌ Finnhub API 호출 실패"
         fi
 
     - name: 결과 요약
@@ -108,6 +108,7 @@ jobs:
         echo "  1. Worker /debug (KIS 잔고 조회)"
         echo "  2. Worker /api/portfolio (포트폴리오)"
         echo "  3. Telegram sendMessage (알림 발송)"
-        echo "  4. FMP API (시세 조회)"
+        echo "  4. Finnhub API (시세 조회)"
         echo ""
         echo "위 각 단계의 로그를 확인하세요."
+

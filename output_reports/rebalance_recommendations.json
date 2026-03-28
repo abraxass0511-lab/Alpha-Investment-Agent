@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-28 16:11",
+  "timestamp": "2026-03-28 16:22",
   "sell": [],
   "buy": [
     {
@@ -20,7 +20,7 @@
       "symbol": "APA",
       "name": "APA Corporation",
       "price": "44.39",
-      "reason": "실적 개선, 천연가스 수요 증가 전망, 목표가 상향 등 긍정적 요인 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 46.29%",
+      "reason": "실적 개선, 천연가스 수요 증가 기대, 목표가 상향 등 긍정적 요인 다수 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 46.29%",
       "action": "BUY"
     },
     {
@@ -29,16 +29,9 @@
       "price": "73.58",
       "reason": "안정적 현금 흐름, 성장 잠재력, 견조한 실적, 배당 매력 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: 29.53%",
       "action": "BUY"
-    },
-    {
-      "symbol": "BF-B",
-      "name": "Brown–Forman",
-      "price": "27.19",
-      "reason": "실적 개선 기대감과 경쟁사 협력 가능성 시사 (Gemini Flash 🧠, Stable 📡, 점수: 0.75) | 12-1 모멘텀: -15.27%",
-      "action": "BUY"
     }
   ],
   "held_count": 0,
   "scan_passed": 14,
-  "picks_passed": 5
+  "picks_passed": 4
 }

@@ -1,15 +1,18 @@
 """
-Alpha Backtest — 7년 Quality Momentum 전략 검증
+Alpha Backtest — 10년 Quality Momentum 전략 검증
 
-전략:
+전략 (실전과 동일, 5단계 센티먼트만 제외):
   1+2) 시총 $10B+ & ROE 15%+
   3)   주가 > 50MA
   6)   12-1 모멘텀 Top 5 매수
   매도: 트레일링 스탑 -10% OR 50MA 이탈
 
-기간: 2019.01 ~ 2026.03 (7년, 코로나+금리폭락 포함)
-매도: 매일 체크 (가디언 동일)
-매수: 월 1회 스캔일 (빈 슬롯 = 현금 보유)
+기간: 2016.01 ~ 2026.03 (10년)
+  - 2016~2017: 상승장
+  - 2018 Q4: 급락장 (-20%)
+  - 2020: 코로나 폭락 & V자 반등
+  - 2022: 금리 인상 약세장
+  - 2023~2024: AI 랠리
 벤치마크: S&P 500 (SPY)
 """
 
@@ -25,7 +28,7 @@ from bs4 import BeautifulSoup
 # ============================================================
 # Config
 # ============================================================
-BACKTEST_START = "2019-01-01"
+BACKTEST_START = "2016-01-01"
 BACKTEST_END = "2026-03-28"
 TOP_N = 5  # 매월 Top N 종목 매수
 TRAILING_STOP = -0.10  # -10%
@@ -387,7 +390,7 @@ def main():
     start_time = time.time()
 
     print(f"{'='*55}")
-    print(f"🔬 Alpha Backtest — 7년 Quality Momentum 검증")
+    print(f"🔬 Alpha Backtest — 10년 Quality Momentum 검증")
     print(f"{'='*55}")
 
     # 1. S&P 500 목록

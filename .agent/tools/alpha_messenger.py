@@ -11,6 +11,41 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+
+def _gemini_stock_analysis(symbol, name, data_dict):
+    """Gemini Flash로 종목별 매수 근거 1~2문장 생성 (읽기 전용, 숫자 조작 불가)"""
+    if not GEMINI_API_KEY:
+        return ""
+    try:
+        prompt = f"""당신은 주식 투자 분석가입니다. 아래 데이터를 읽고 이 종목을 왜 매수해야 하는지 핵심만 1~2문장으로 설명하세요.
+대표님에게 보고하는 싹싹하고 친근한 말투로 작성하세요.
+
+종목: {name} ({symbol})
+데이터 (수정 불가):
+{json.dumps(data_dict, ensure_ascii=False, indent=2)}
+
+⚠️ 규칙:
+- 위 숫자를 수정하거나 새로운 숫자를 만들지 마세요
+- 한국어 1~2문장으로만 답변하세요
+- 이모지 1개만 앞에 붙이세요"""
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 100},
+        }
+        r = requests.post(url, json=payload, timeout=10)
+        if r.status_code == 200:
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            return text
+        elif r.status_code == 429:
+            print(f"    ⚠️ Gemini 쿼터 초과 — AI 분석 생략")
+            return ""
+    except Exception as e:
+        print(f"    ⚠️ Gemini 분석 에러 ({symbol}): {e}")
+    return ""
 
 def send_telegram_message(text):
     if not TELEGRAM_TOKEN or not CHAT_ID:
@@ -299,7 +334,16 @@ def report_daily_picks():
                 growth_str = f"{eps_g}%" if eps_g is not None and eps_g != "" else "N/A"
                 picks_content += f"   🔬 Surprise: {surprise}% | Growth: {growth_str}\n"
                 picks_content += f"   ⚡ 12-1 모멘텀: {mom_pct}%\n"
-                picks_content += f"   • `핵심근거`: {reason}\n\n"
+                picks_content += f"   • `핵심근거`: {reason}\n"
+                # Gemini AI 종목별 분석
+                ai_comment = _gemini_stock_analysis(symbol, name, {
+                    "시총(M)": mcap, "ROE(%)": roe_val, "현재가": price,
+                    "50MA": ma50, "Surprise(%)": surprise, "EPS성장(%)": eps_g,
+                    "12-1모멘텀(%)": mom_pct, "심리점수": reason,
+                })
+                if ai_comment:
+                    picks_content += f"   🧠 _{ai_comment}_\n"
+                picks_content += "\n"
             analysis_section += picks_content
     else:
         analysis_section += "❌ *조건 부합 종목 없음*\n\n"
@@ -340,7 +384,14 @@ def report_daily_picks():
                     name = b.get("name", sym)
                     reason = b.get("reason", "기준 통과")
                     rebalance_section += f"  📈 *{name} ({sym})*\n"
-                    rebalance_section += f"     근거: _{reason}_\n\n"
+                    rebalance_section += f"     근거: _{reason}_\n"
+                    # Gemini AI 종목별 분석
+                    ai_comment = _gemini_stock_analysis(sym, name, {
+                        "매수근거": reason,
+                    })
+                    if ai_comment:
+                        rebalance_section += f"     🧠 _{ai_comment}_\n"
+                    rebalance_section += "\n"
 
     except Exception as e:
         print(f"⚠️ 리밸런싱 데이터 로드 에러: {e}")

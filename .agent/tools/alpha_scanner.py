@@ -6,7 +6,7 @@ Alpha Scanner V5 — Finnhub + Yahoo Engine
   [1+2단계] Finnhub /metric     → 시총 $10B+ & ROE 15%+  (1콜로 동시 처리)
   [3+6단계] Finnhub /candle     → 50MA 필터 + 12-1 모멘텀 사전 계산 (1콜로 동시 처리)
   [4단계]   Finnhub /earnings   → Surprise ≥10% OR EPS Growth ≥20%
-  [5단계]   별도 alpha_sentiment.py (Finnhub News + VADER + Gemini)
+  [5단계]   별도 alpha_sentiment.py (MarketAux ML sentiment_score, 관련도≥0.8)
   [6단계]   3단계에서 이미 계산한 12-1 모멘텀으로 Top 5 소팅 (추가 콜 0)
 
 Finnhub: 분당 60콜, 일일 제한 없음 — 쿼터 걱정 완전 제거!

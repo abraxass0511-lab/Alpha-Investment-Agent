@@ -445,7 +445,7 @@ def handle_today_scan():
         msg += f"`1+2단계` 체급+내실 : {meta.get('total', 503)} → *{step12}건*\n"
         msg += f"`3단계` 에너지 : → *{meta.get('step3', 0)}건*\n"
         msg += f"`4단계` 성장   : → *{meta.get('step4', 0)}건*\n"
-        msg += f"`5단계` 심리   : → *{meta.get('step5', 0)}건*\n"
+        msg += f"`5단계` 심리(ML≥0.7 & SMA₅≥0.6) : → *{meta.get('step5', 0)}건*\n"
         msg += f"`6단계` 기세   : → *{meta.get('step6', 0)}건*\n\n"
 
         step6 = meta.get('step6', 0)

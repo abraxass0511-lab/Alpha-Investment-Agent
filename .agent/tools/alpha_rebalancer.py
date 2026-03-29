@@ -74,17 +74,20 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
     """
     보유 종목을 1~6단계 기준으로 재검증합니다.
     
-    ★ 5단계(심리) 기준이 신규 매수와 다릅니다:
-      - 신규 매수: Sentiment ≥ 0.7 (뉴스 없으면 0.5)
-      - 기존 보유: Sentiment > 0.4 유지 (≤ 0.4 되면 매도 추천)
+    ★ 5단계(심리) 비대칭 임계값:
+      - 신규 매수: Sentiment ≥ 0.7 (입구는 좁게)
+      - 기존 보유: Sentiment ≥ 0.5 유지 (출구는 넓게)
+      - 위기 감지: Sentiment < 0.5 → 매도 추천
+    
+    ★ No News Rule:
+      - 보유 종목 뉴스 없음 → "무소식이 희소식" → 유지(Hold)
     
     - daily_scan_latest.csv에 있음 = 1~4단계 통과
-    - sentiment_all_latest.csv에서 보유종목 센티먼트 확인 (> 0.4)
-    - 없으면 → 탈락 (어떤 단계에서 탈락했는지 분석)
+    - sentiment_all_latest.csv에서 보유종목 센티먼트 확인 (≥ 0.5)
     """
     sell_recommendations = []
 
-    # 센티먼트 전체 결과 로드 (보유종목 기준 0.4로 체크)
+    # 센티먼트 전체 결과 로드 (보유종목 기준 0.5로 체크)
     sentiment_data = load_csv("output_reports/sentiment_all_latest.csv")
 
     for stock in held_stocks:
@@ -131,15 +134,15 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
             if roe < 15:
                 reasons.append(f"3단계(내실) 탈락: ROE {roe:.1f}% < 15%")
 
-            # 5단계(심리) 보유종목 기준: > 0.4 유지
+            # ★ 5단계(심리) 보유종목 기준: ≥ 0.5 유지 (비대칭 임계값)
             if sym in sentiment_data:
                 sent_row = sentiment_data[sym]
                 sent_score = float(sent_row.get("Sentiment", "0"))
-                if sent_score <= 0.4:
-                    reasons.append(f"5단계(심리) 탈락: 센티먼트 {sent_score:.2f} ≤ 0.4 (보유 유지 기준 미달)")
+                if sent_score < 0.5:
+                    reasons.append(f"5단계(심리) 탈락: 센티먼트 {sent_score:.2f} < 0.5 (보유 유지 기준 미달)")
             else:
-                # 센티먼트 데이터 없음 = 뉴스 없음 → 보유 유지 (0.5 취급)
-                pass  # 뉴스 없으면 보유 유지 OK
+                # ★ No News Rule: 보유 종목 뉴스 없음 → "무소식이 희소식" → 유지(Hold)
+                pass
 
         else:
             # 스캔에 없음 → 1~4단계 중 탈락

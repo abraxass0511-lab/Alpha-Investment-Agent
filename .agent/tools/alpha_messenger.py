@@ -261,7 +261,7 @@ def report_daily_picks():
     summary_table += f"| 1+2단계 | 체급+내실 | {s12}건 | 시총$10B+ ROE15%+ | Finnhub |\n"
     summary_table += f"| 3단계 | 에너지 | {s3}건 | 가격 > 50MA | Finnhub |\n"
     summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | Finnhub |\n"
-    summary_table += f"| 5단계 | 심리 | {s5}건 | 점수 0.7+ | Finnhub+Gemini |\n"
+    summary_table += f"| 5단계 | 심리 | {s5}건 | ML점수≥0.7 & SMA₅≥0.6 | MarketAux |\n"
     summary_table += f"| 6단계 | Elite 5 | {s6}건 | 12-1 모멘텀 Top5 | Finnhub |\n\n"
 
     analysis_section = "*🧠 심층 분석 결과 (최종 승인 대기)*\n"
@@ -376,7 +376,7 @@ def report_daily_picks():
 - 1+2단계(시총$10B+ & ROE15%+): {meta.get('step12', meta.get('step1',0))}건 통과
 - 3단계(50MA돌파): {meta.get('step3',0)}건 통과
 - 4단계(성장): {meta.get('step4',0)}건 통과
-- 5단계(심리0.7+): {meta.get('step5',0)}건 통과
+- 5단계(MarketAux ML심리≥0.7 & SMA₅≥0.6): {meta.get('step5',0)}건 통과
 - 6단계(최종): {meta.get('step6',0)}건 선정
 - 최종 종목: {', '.join(buy_stocks) if buy_stocks else '없음'}
 
@@ -402,7 +402,7 @@ def report_daily_picks():
 
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
     if meta.get("success_all", False):
-        footer = "📝 _비고 : Finnhub에서 모든 정보 수집 완료_"
+        footer = "📝 _비고 : Finnhub+MarketAux에서 모든 정보 수집 완료_"
     else:
         total = meta.get("total", 503)
         collected = meta.get("step1", 0) + (total - meta.get("step1", 0))  # 수집 시도 수

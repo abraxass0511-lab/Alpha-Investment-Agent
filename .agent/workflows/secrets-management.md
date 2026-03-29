@@ -16,13 +16,14 @@ description: 시크릿/환경변수 관리 원칙 - GitHub Secrets 및 Cloudflar
 | `TELEGRAM_BOT_TOKEN` | 텔레그램 봇 토큰 | messenger, notify_failure |
 | `TELEGRAM_CHAT_ID` | 텔레그램 채팅 ID | messenger, notify_failure |
 | `FMP_API_KEY` | Financial Modeling Prep API | scanner (3,4단계) |
-| `FINNHUB_API_KEY` | Finnhub 뉴스 API | sentiment (5단계) |
+| `FINNHUB_API_KEY` | Finnhub API | scanner (1~4단계), sentiment (6단계 백업) |
 | `KIS_APP_KEY` | 한국투자증권 앱키 | trader, rebalancer |
 | `KIS_SECRET_KEY` | 한국투자증권 시크릿키 | trader, rebalancer |
 | `KIS_CANO` | 계좌번호 (앞 8자리) | trader |
 | `KIS_ACNT_PRDT_CD` | 계좌상품코드 | trader |
 | `KIS_BASE_URL` | KIS API 베이스 URL | trader |
-| `GEMINI_API_KEY` | Gemini Flash AI API | sentiment, messenger |
+| `GEMINI_API_KEY` | Gemini Flash AI API | messenger (AI 인사이트) |
+| `MARKETAUX_API_KEY` | MarketAux ML 심리분석 API | sentiment (5단계) |
 
 ## Cloudflare Worker 환경변수 (worker.js에서 사용)
 

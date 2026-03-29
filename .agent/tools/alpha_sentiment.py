@@ -1,23 +1,100 @@
+"""
+★ Alpha Sentiment V3 — MarketAux ML 정량 심리 분석 엔진 ★
+
+핵심 설계:
+1. 데이터 필터링: MarketAux match_score ≥ 0.8 (주인공 뉴스만)
+2. 비대칭 임계값: 신규 ≥ 0.7 (BUY) / 보유 ≥ 0.5 (Hold) / < 0.5 (Exit)
+3. 변동성 제어: 심리 5일선(SMA₅) — 당일 0.7+ AND SMA₅ 0.6+ 이중 게이트
+4. No News Rule: 신규=매수금지 / 보유=유지(Hold)
+
+데이터 무결성 원칙:
+- Symbol, Price, ROE 등 모든 숫자는 CSV 원본(row)에서만 추출
+- MarketAux는 심리 점수만 제공 → 다른 데이터 생성/수정 불가
+"""
 import os
 import json
 import pandas as pd
 import requests
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 import time
 
 load_dotenv()
-FINNHUB_KEY = os.getenv("FINNHUB_API_KEY")
-analyzer = SentimentIntensityAnalyzer()
+MARKETAUX_KEY = os.getenv("MARKETAUX_API_KEY")
+FINNHUB_KEY = os.getenv("FINNHUB_API_KEY")  # 6단계 모멘텀 계산용 (유지)
 
-# 고퀄리티 언론사 리스트
-PREMIUM_SOURCES = ["Reuters", "Bloomberg", "CNBC", "MarketWatch", "Wall Street Journal", "WSJ", "Financial Times", "FT"]
-# 결정적 키워드 리스트
-BOOST_KEYWORDS = ["Surprise", "Upgrade", "Exclusive", "New Contract", "Beat", "Approval", "Soar", "Bullish", "Buy"]
+# ★ 5단계 핵심 상수 ★
+RELEVANCE_THRESHOLD = 0.8   # match_score 이 이상인 기사만 사용 (주인공 필터)
+SENTIMENT_BUY_LINE = 0.7    # 신규 매수 통과 기준
+SENTIMENT_HOLD_LINE = 0.5   # 보유 유지 기준
+SMA_APPROVAL_LINE = 0.6     # SMA₅ 이중 게이트 기준
+SMA_MIN_DAYS = 3            # 콜드 스타트: 최소 3일 데이터 필요
+NEWS_LIMIT = 10             # 종목당 최대 기사 수
 
-def _alert_sentiment_gap(symbol):
+HISTORY_FILE = "output_reports/sentiment_history.json"
+
+
+# ═══════════════════════════════════════════════════════
+# 심리 히스토리 관리 (SMA₅ 용)
+# ═══════════════════════════════════════════════════════
+def load_sentiment_history():
+    """날짜별 종목별 심리 점수 히스토리 로드"""
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except:
+        pass
+    return {}
+
+
+def save_sentiment_history(history):
+    """히스토리 저장 (최근 10일만 유지하여 파일 크기 관리)"""
+    os.makedirs("output_reports", exist_ok=True)
+    
+    # 10일 이상 된 데이터 정리
+    cutoff = (datetime.utcnow() - timedelta(days=10)).strftime("%Y-%m-%d")
+    cleaned = {}
+    for sym, dates in history.items():
+        recent = {d: s for d, s in dates.items() if d >= cutoff}
+        if recent:
+            cleaned[sym] = recent
+    
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(cleaned, f, indent=2)
+
+
+def calculate_sma5(history, symbol):
+    """
+    심리 5일선(SMA₅) 계산
+    
+    - 5일 이상 히스토리 → 최근 5일 평균
+    - 3~4일 히스토리 → 해당 일수 평균
+    - 3일 미만 → None (콜드 스타트: SMA 게이트 비활성)
+    """
+    if symbol not in history:
+        return None
+    
+    dates = sorted(history[symbol].keys(), reverse=True)
+    if len(dates) < SMA_MIN_DAYS:
+        return None  # 콜드 스타트: 데이터 부족
+    
+    recent = dates[:5]  # 최근 5일 (또는 있는 만큼)
+    scores = [history[symbol][d] for d in recent]
+    return round(sum(scores) / len(scores), 3)
+
+
+def update_history(history, symbol, score, date_str):
+    """오늘 점수를 히스토리에 추가"""
+    if symbol not in history:
+        history[symbol] = {}
+    history[symbol][date_str] = score
+
+
+# ═══════════════════════════════════════════════════════
+# 텔레그램 알림
+# ═══════════════════════════════════════════════════════
+def _alert_sentiment_gap(symbol, reason=""):
     """5단계 뉴스 데이터 누락 시 텔레그램 알림"""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -25,7 +102,7 @@ def _alert_sentiment_gap(symbol):
         msg = (
             f"⚠️ *5단계 뉴스 데이터 누락*\n\n"
             f"종목: `{symbol}`\n"
-            f"Finnhub 뉴스 0건 — 센티먼트 분석 불가\n"
+            f"{reason}\n"
             f"_해당 종목은 5단계 스킵됩니다_"
         )
         try:
@@ -36,250 +113,197 @@ def _alert_sentiment_gap(symbol):
             )
         except:
             pass
-    print(f"    ⚠️ {symbol} 뉴스 0건 — 5단계 스킵 (텔레그램 알림)")
+    print(f"    ⚠️ {symbol} {reason}")
 
 
-def fetch_finnhub_news(symbol):
-    if not FINNHUB_KEY: return []
-    # 최근 2일 데이터 수집 (48시간)
-    to_date = datetime.now().strftime('%Y-%m-%d')
-    from_date = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
-
-    # 1차: 원본 심볼로 시도
-    url = f"https://finnhub.io/api/v1/company-news?symbol={symbol}&from={from_date}&to={to_date}&token={FINNHUB_KEY}"
-    try:
-        r = requests.get(url, timeout=5)
-        if r.status_code == 200:
-            result = r.json()
-            if result:
-                return result
-
-        # 2차: 하이픈 → 마침표 변환 시도 (BF-B → BF.B)
-        if "-" in symbol:
-            alt_symbol = symbol.replace("-", ".")
-            url2 = f"https://finnhub.io/api/v1/company-news?symbol={alt_symbol}&from={from_date}&to={to_date}&token={FINNHUB_KEY}"
-            r2 = requests.get(url2, timeout=5)
-            if r2.status_code == 200:
-                result2 = r2.json()
-                if result2:
-                    return result2
-
-        # API는 정상이지만 뉴스 0건 → 정상 케이스 (알림 불필요)
-        return []
-
-    except Exception as e:
-        # API 자체 장애 → 텔레그램 알림
-        _alert_sentiment_gap(symbol)
-        print(f"    ⚠️ {symbol} Finnhub 뉴스 API 에러: {e}")
-        return []
-
-def select_quality_news(news_list):
-    """양보다 질: 정예 뉴스 5~10개 선정 로직"""
-    if not news_list: return []
-    
-    scored_news = []
-    now_ts = int(time.time())
-    
-    for item in news_list:
-        score = 0
-        title = item.get('headline', '')
-        source = item.get('source', '')
-        ts = item.get('datetime', 0)
-        
-        # 1. 출처의 신뢰도 (+5점)
-        if any(ps in source for ps in PREMIUM_SOURCES): score += 5
-        
-        # 2. 키워드 가중치 (+3점)
-        if any(kw.lower() in title.lower() for kw in BOOST_KEYWORDS): score += 3
-        
-        # 3. 시간의 신설도 (24시간 이내 +5점)
-        if (now_ts - ts) < 86400: score += 5
-        
-        scored_news.append({'title': title, 'score': score, 'source': source})
-        
-    # 점수 높은 순으로 정렬 후 상위 10개 추출
-    sorted_news = sorted(scored_news, key=lambda x: x['score'], reverse=True)
-    return sorted_news[:10]
-
-def gemini_sentiment_score(headlines, symbol):
+# ═══════════════════════════════════════════════════════
+# MarketAux API
+# ═══════════════════════════════════════════════════════
+def fetch_marketaux_sentiment(symbol):
     """
-    [Gemini Flash AI 센티먼트 분석]
-    
-    ★ 절대 원칙 ★
-    - AI는 뉴스 헤드라인을 읽고 점수(0.0~1.0)와 한줄 사유 반환만 함
-    - AI가 주가, 시총, ROE 등 숫자 데이터를 생성하거나 수정하는 것은 불가능
-    - 실패 시 None을 반환하여 VADER 백업으로 전환
+    ★ MarketAux API: 종목별 뉴스 + ML 심리점수 수집 ★
+    필터: match_score ≥ 0.8 (주인공 뉴스만)
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key or not headlines:
+    if not MARKETAUX_KEY:
+        print(f"    ❌ MARKETAUX_API_KEY 없음")
         return None
 
-    headlines_text = "\n".join([f"- {h}" for h in headlines[:10]])
-
-    prompt = f"""다음은 {symbol} 종목에 대한 최근 뉴스 헤드라인입니다:
-
-{headlines_text}
-
-이 뉴스들을 종합적으로 분석하여 투자 심리 점수를 매겨주세요.
-
-규칙:
-1. 점수는 0.0(매우 부정) ~ 1.0(매우 긍정) 사이의 소수점 2자리 숫자
-2. 반드시 아래 JSON 형식으로만 답하세요. 다른 텍스트 금지.
-3. reason은 한국어로 30자 이내
-
-{{"score": 0.75, "reason": "실적 호조와 신규 계약 긍정적"}}"""
+    url = "https://api.marketaux.com/v1/news/all"
+    params = {
+        "symbols": symbol,
+        "filter_entities": "true",
+        "must_have_entities": "true",
+        "language": "en",
+        "limit": NEWS_LIMIT,
+        "published_after": (datetime.utcnow() - timedelta(days=3)).strftime('%Y-%m-%dT%H:%M'),
+        "api_token": MARKETAUX_KEY,
+    }
 
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 100},
-        }
-        r = requests.post(url, json=payload, timeout=15)
-        
+        r = requests.get(url, params=params, timeout=15)
+
         if r.status_code == 429:
-            print(f"    ⚠️ Gemini 무료 초과 → VADER 백업 ({symbol})")
+            print(f"    ⚠️ MarketAux 쿼터 초과 (429) — {symbol}")
+            return None
+        if r.status_code == 402:
+            print(f"    ⚠️ MarketAux 플랜 제한 (402) — {symbol}")
             return None
         if r.status_code != 200:
+            print(f"    ⚠️ MarketAux HTTP {r.status_code} — {symbol}")
             return None
 
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        
-        # JSON 파싱 (엄격 검증)
-        # ```json ... ``` 래핑 제거
-        if text.startswith("```"):
-            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        
-        result = json.loads(text)
-        score = float(result.get("score", -1))
-        reason = str(result.get("reason", ""))
+        data = r.json()
+        articles = data.get("data", [])
 
-        # ★ 엄격 검증: 0.0~1.0 범위 밖이면 거부
-        if score < 0.0 or score > 1.0:
-            print(f"    ❌ Gemini 비정상 점수({score}) → VADER 백업 ({symbol})")
-            return None
+        if not articles:
+            return {"scores": [], "articles_total": 0, "articles_relevant": 0, "sources": []}
 
-        return {"score": round(score, 3), "reason": reason[:50]}
+        scores = []
+        sources = []
+
+        for article in articles:
+            entities = article.get("entities", [])
+            source = article.get("source", "Unknown")
+
+            for ent in entities:
+                ent_symbol = ent.get("symbol", "")
+                match_score = ent.get("match_score", 0) or 0
+                sent_score = ent.get("sentiment_score")
+
+                # ★ 핵심 필터: 심볼 일치 + 관련도 0.8 이상 + 점수 존재 ★
+                if (ent_symbol == symbol
+                        and match_score >= RELEVANCE_THRESHOLD
+                        and sent_score is not None):
+                    scores.append(float(sent_score))
+                    sources.append(source)
+
+        return {
+            "scores": scores,
+            "articles_total": len(articles),
+            "articles_relevant": len(scores),
+            "sources": list(set(sources)),
+        }
 
     except Exception as e:
-        print(f"    ⚠️ Gemini 에러({e}) → VADER 백업 ({symbol})")
+        print(f"    ⚠️ MarketAux 에러({e}) — {symbol}")
         return None
 
 
-def analyze_ticker_finnhub(row):
+# ═══════════════════════════════════════════════════════
+# 5단계 핵심 분석 함수
+# ═══════════════════════════════════════════════════════
+def analyze_ticker_marketaux(row, history, today_str):
     """
-    ★ 5단계 심리 분석 (Gemini Flash + VADER 이중 검증) ★
+    ★ 5단계 심리 분석 — 4대 규칙 적용 ★
     
-    데이터 무결성 원칙:
-    - Symbol, Name, Price, ROE, Momentum 등 모든 숫자는 row(CSV 원본)에서만 가져옴
-    - AI는 뉴스 헤드라인 판독만 수행 → 점수(0~1)와 사유 반환
-    - AI가 row의 어떤 값도 생성하거나 수정할 수 없음
+    규칙1: 관련도 ≥ 0.8 필터 (주인공 뉴스만)
+    규칙2: 신규 매수 ≥ 0.7 / 보유 ≥ 0.5
+    규칙3: SMA₅ ≥ 0.6 이중 게이트
+    규칙4: No News = 신규 매수 금지
     """
-    # ★ 숫자 데이터는 반드시 CSV 원본(row)에서만 추출 ★
     symbol = row.get('Symbol')
     name = row.get('Name')
-    price = row['Price']              # API 원본 그대로
-    momentum = row['MA_Momentum(%)']  # API 원본 그대로 (★ 키명 일치!)
-    roe = row['ROE(%)']          # API 원본 그대로
-    
-    # 1. Finnhub에서 실제 뉴스 수집 (AI 아님)
-    news = fetch_finnhub_news(symbol)
-    quality_news = select_quality_news(news)
-    
-    if not quality_news:
-        # 뉴스 0건 = 펀더멘털 기반 통과 (4단계 이미 검증 완료)
-        # ★ 0.7 이상이어야 BUY → 뉴스 없다고 탈락시키면 안 됨
-        print(f"    📭 {symbol} 뉴스 0건 → 펀더멘털 기반 BUY 통과")
+    price = row['Price']
+    momentum = row['MA_Momentum(%)']
+    roe = row['ROE(%)']
+
+    # 1. MarketAux에서 ML 심리점수 수집
+    result = fetch_marketaux_sentiment(symbol)
+
+    if result is None:
+        # API 장애 → 안전 모드: 매수 금지 (No News Rule 적용)
+        print(f"    📭 {symbol} MarketAux API 장애 → 매수 금지 (안전 모드)")
+        return None
+
+    scores = result["scores"]
+    total = result["articles_total"]
+    relevant = result["articles_relevant"]
+    sources = result["sources"]
+
+    # ★ 규칙4: No News Rule ★
+    if not scores:
+        # 관련도 0.8+ 뉴스 0건 → 신규 매수 금지 (검증 불가)
+        print(f"    📭 {symbol} 관련 뉴스 0건 (전체 {total}건) → 신규 매수 금지 (No News Rule)")
+        # 히스토리에는 기록하지 않음 (데이터 없는 날은 SMA에서 제외)
         return {
             "Symbol": symbol,
             "Name": name,
             "Price": price,
             "Momentum(%)": momentum,
-            "Sentiment": 0.70,
+            "Sentiment": 0.50,  # 중립으로 기록 (보유 종목이면 Hold 가능)
+            "SMA5": calculate_sma5(history, symbol),
             "ROE(%)": roe,
             "MarketCap_M": row.get('MarketCap_M', 0),
             "MA50": row.get('MA50', 0),
             "Surprise(%)": row.get('Surprise(%)', 0),
             "EPS_Growth(%)": row.get('EPS_Growth(%)', 0),
-            "Status": "BUY (매수 승인 대기)",
-            "Reason": "뉴스 없음 — 펀더멘털 4단계 검증 통과 (📭 No News)",
+            "Status": "HOLD (뉴스 없음 — 신규 매수 금지)",
+            "Reason": f"📭 No News Rule — 관련 뉴스 0건 (전체 {total}건, 관련도≥{RELEVANCE_THRESHOLD})",
         }
-    
-    headlines = [item['title'] for item in quality_news]
-    premium_found = any(item['score'] >= 10 for item in quality_news)
-    
-    # 2. Gemini Flash로 심리 분석 시도
-    ai_result = gemini_sentiment_score(headlines, symbol)
-    
-    if ai_result:
-        # ★ AI 성공: Gemini 점수 사용 ★
-        final_score = ai_result["score"]
-        ai_reason = ai_result["reason"]
-        engine = "Gemini Flash 🧠"
-    else:
-        # ★ AI 실패: VADER 백업 (기존 로직 그대로) ★
-        sentiment_scores = []
-        for item in quality_news:
-            title = item['title']
-            v_score = analyzer.polarity_scores(title)['compound']
-            if item['score'] >= 10:
-                v_score *= 1.2
-            sentiment_scores.append(v_score)
-        final_score = round(
-            sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0,
-            3
-        )
-        ai_reason = "VADER 규칙 기반 분석"
-        engine = "VADER 📡"
-    
-    # 3. 매수 상태 판정 (기준은 동일)
+
+    # 2. ★ 정량 점수 계산: 관련도 0.8+ 기사들의 평균 sentiment ★
+    avg_marketaux = sum(scores) / len(scores)  # -1 ~ +1
+    today_score = round((avg_marketaux + 1) / 2, 3)  # 알파 스케일 (0~1)
+
+    # 3. 히스토리에 오늘 점수 기록 (SMA₅ 계산용)
+    update_history(history, symbol, today_score, today_str)
+
+    # 4. ★ 규칙3: SMA₅ 이중 게이트 ★
+    sma5 = calculate_sma5(history, symbol)
+    sma5_pass = True
+    sma5_label = "N/A (축적 중)"
+
+    if sma5 is not None:
+        sma5_label = f"{sma5:.3f}"
+        if sma5 < SMA_APPROVAL_LINE:
+            sma5_pass = False  # SMA₅ < 0.6 → 매수 차단
+
+    # 5. ★ 규칙2: 매수 상태 판정 ★
     status = "REJECT"
-    if final_score >= 0.7: status = "BUY (매수 승인 대기)"
-    elif final_score >= 0.4: status = "HOLD (관망/대기)"
-    
-    if final_score < 0.3: return None
-    
-    source_label = "Premium 🏛️" if premium_found else "Stable 📡"
-    reason = f"{ai_reason} ({engine}, {source_label}, 점수: {final_score})"
-    
-    # ★ 반환값: 숫자는 100% row 원본, AI는 reason만 제공 ★
+    if today_score >= SENTIMENT_BUY_LINE and sma5_pass:
+        status = "BUY (매수 승인 대기)"
+    elif today_score >= SENTIMENT_BUY_LINE and not sma5_pass:
+        status = "HOLD (SMA₅ 미달 — 추세 확인 중)"
+    elif today_score >= SENTIMENT_HOLD_LINE:
+        status = "HOLD (관망/대기)"
+
+    if today_score < 0.3:
+        print(f"    ❌ {symbol} 즉시 탈락 — 심리 {today_score:.3f} < 0.3")
+        return None
+
+    source_label = ", ".join(sources[:3]) if sources else "N/A"
+    reason = (
+        f"MarketAux ML 📊 "
+        f"today={today_score:.3f} SMA₅={sma5_label} "
+        f"({relevant}/{total}건, 관련도≥{RELEVANCE_THRESHOLD}, "
+        f"출처: {source_label})"
+    )
+
+    print(f"    ✅ {symbol} today={today_score:.3f} SMA₅={sma5_label} [{status}]")
+
     return {
         "Symbol": symbol,
         "Name": name,
-        "Price": price,           # API 원본
-        "Momentum(%)": momentum,  # 보고서용 표시명
-        "Sentiment": final_score,
-        "ROE(%)": roe,            # API 원본
+        "Price": price,
+        "Momentum(%)": momentum,
+        "Sentiment": today_score,
+        "SMA5": sma5,
+        "ROE(%)": roe,
         "MarketCap_M": row.get('MarketCap_M', 0),
         "MA50": row.get('MA50', 0),
         "Surprise(%)": row.get('Surprise(%)', 0),
         "EPS_Growth(%)": row.get('EPS_Growth(%)', 0),
         "Status": status,
-        "Reason": reason
+        "Reason": reason,
     }
 
 
+# ═══════════════════════════════════════════════════════
+# 6단계: 12-1 모멘텀
+# ═══════════════════════════════════════════════════════
 def calculate_12_1_momentum(symbol):
-    """
-    Step 6: Calculate 12-1 Month Momentum
-    Yahoo 1차 (Finnhub /candle 무료 계정 403 차단)
-    Formula: (Price_{t-1} / Price_{t-12}) - 1
-    """
-    # 1차: Yahoo Finance
-    try:
-        import yfinance as yf
-        t = yf.Ticker(symbol)
-        hist = t.history(period="1y")
-        if len(hist) > 21:
-            closes = hist["Close"].tolist()
-            price_t1 = closes[-22]
-            price_t12 = closes[0]
-            if price_t12 > 0:
-                return round((price_t1 / price_t12) - 1, 4)
-    except Exception as e:
-        print(f"    ⚠️ Yahoo 6단계 에러({e}) ({symbol})")
-
-    # 2차: Finnhub 백업
+    """Step 6: 12-1 Month Momentum (Finnhub Primary → Yahoo Fallback)"""
+    # 1차: Finnhub Candle API (Primary)
     FKEY = os.getenv("FINNHUB_API_KEY")
     if FKEY:
         try:
@@ -299,19 +323,36 @@ def calculate_12_1_momentum(symbol):
         except Exception as e:
             print(f"    ⚠️ Finnhub 6단계 에러({e}) ({symbol})")
 
+    # 2차: Yahoo Finance (Fallback)
+    try:
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        hist = t.history(period="1y")
+        if len(hist) > 21:
+            closes = hist["Close"].tolist()
+            price_t1 = closes[-22]
+            price_t12 = closes[0]
+            if price_t12 > 0:
+                return round((price_t1 / price_t12) - 1, 4)
+    except Exception as e:
+        print(f"    ⚠️ Yahoo 6단계 폴백 에러({e}) ({symbol})")
+
     return 0.0
 
 
-def run_sentiment_v2():
+# ═══════════════════════════════════════════════════════
+# 메인 실행
+# ═══════════════════════════════════════════════════════
+def run_sentiment_v3():
+    """★ MarketAux 기반 5단계 + 6단계 실행 ★"""
     scan_file = "output_reports/daily_scan_latest.csv"
     if not os.path.exists(scan_file):
         print("❌ daily_scan_latest.csv 없음 — 스캐너가 실행되지 않았습니다.")
         return
-    
+
     df = pd.read_csv(scan_file)
     if df.empty:
         print("⚠️ 4단계 통과 종목 0건 — 빈 결과 처리")
-        # 빈 결과라도 metadata 업데이트 + 빈 final_picks 생성
         try:
             with open("output_reports/metadata.json", "r") as f:
                 meta = json.load(f)
@@ -323,40 +364,52 @@ def run_sentiment_v2():
             json.dump(meta, f)
         pd.DataFrame().to_csv("output_reports/final_picks_latest.csv", index=False)
         return
-    
-    print(f"🚀 [Alpha Sentiment V2] Finnhub 정예 분석 가동 (품질 필터링 적용)...")
-    
-    sentiment_passed = []
-    # Finnhub API Rate Limit 방지를 위해 Worker 조절 (10명)
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(analyze_ticker_finnhub, row) for _, row in df.iterrows()]
-        for future in as_completed(futures, timeout=600):  # 10min max
-            try:
-                res = future.result(timeout=60)
-                if res: sentiment_passed.append(res)
-            except Exception:
-                pass
 
-    # 전체 센티먼트 결과 저장 (리밸런서가 보유종목 기준 0.4로 재검증할 때 사용)
-    if sentiment_passed:
-        all_sent_df = pd.DataFrame(sentiment_passed)
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    history = load_sentiment_history()
+
+    print(f"🚀 [Alpha Sentiment V3] MarketAux ML 정량 분석 가동...")
+    print(f"   📋 대상: {len(df)}종목 | 관련도 필터: ≥{RELEVANCE_THRESHOLD}")
+    print(f"   🎯 BUY: ≥{SENTIMENT_BUY_LINE} & SMA₅≥{SMA_APPROVAL_LINE} | HOLD: ≥{SENTIMENT_HOLD_LINE}")
+    print(f"   📅 날짜: {today_str} | 히스토리: {len(history)}종목")
+    print(f"   🔑 API Key: {'있음' if MARKETAUX_KEY else '❌ 없음'}")
+
+    sentiment_all = []
+    # MarketAux Rate Limit: 무료 100콜/일 → 직렬 처리 (안전)
+    for idx, row in df.iterrows():
+        try:
+            res = analyze_ticker_marketaux(row, history, today_str)
+            if res:
+                sentiment_all.append(res)
+        except Exception as e:
+            print(f"    ❌ {row.get('Symbol', '?')} 분석 에러: {e}")
+
+        # MarketAux Rate Limit 방지: 종목간 0.5초 대기
+        time.sleep(0.5)
+
+    # 히스토리 저장 (다음날 SMA₅ 계산용)
+    save_sentiment_history(history)
+    print(f"   💾 심리 히스토리 저장: {len(history)}종목")
+
+    # 전체 센티먼트 결과 저장 (리밸런서용)
+    if sentiment_all:
+        all_sent_df = pd.DataFrame(sentiment_all)
         all_sent_df.to_csv("output_reports/sentiment_all_latest.csv", index=False)
-        print(f"   💾 전체 센티먼트 결과 저장: {len(sentiment_passed)}종목")
-            
-    # 정합성 카운트 (BUY 전용 - Sentiment >= 0.7)
-    buy_candidates = [p for p in sentiment_passed if "BUY" in p['Status']]
+        print(f"   💾 전체 센티먼트 결과 저장: {len(sentiment_all)}종목")
+
+    # ★ BUY 후보: Sentiment ≥ 0.7 AND SMA₅ 게이트 통과 ★
+    buy_candidates = [p for p in sentiment_all if "BUY" in p['Status']]
     buy_count = len(buy_candidates)
-    
+
     try:
         with open("output_reports/metadata.json", "r") as f:
             meta = json.load(f)
     except:
         meta = {"total": 503, "step12": 0, "step3": 0, "step4": 0}
-        
+
     meta["step5"] = buy_count
-    
+
     # [Step 6] 12-1 Momentum Sorting (Elite 5 Selection)
-    # ★ 양수 모멘텀만 매수 — 음수 모멘텀은 탈락 (현금 보유)
     final_picks = []
     if buy_count > 0:
         print(f"⚖️ [Step 6] 12-1 모멘텀 소팅 중... (대상: {buy_count}개 종목)")
@@ -364,20 +417,19 @@ def run_sentiment_v2():
             mom = calculate_12_1_momentum(item['Symbol'])
             item['Momentum_12_1'] = mom
             item['Reason'] += f" | 12-1 모멘텀: {round(mom*100, 2)}%"
-        
-        # ★ 양수 모멘텀만 필터 → Top 5
+
         positive_mom = [x for x in buy_candidates if x['Momentum_12_1'] > 0]
         negative_mom = [x for x in buy_candidates if x['Momentum_12_1'] <= 0]
-        
+
         if negative_mom:
             for item in negative_mom:
                 sym = item['Symbol']
                 mom_pct = round(item['Momentum_12_1'] * 100, 2)
                 print(f"    ❌ {sym} 탈락 — 12-1 모멘텀 {mom_pct}% (음수)")
-        
+
         final_picks = sorted(positive_mom, key=lambda x: x['Momentum_12_1'], reverse=True)[:5]
         meta["step6"] = len(final_picks)
-        
+
         if len(final_picks) < 5:
             print(f"    ℹ️ 양수 모멘텀 {len(positive_mom)}개 → Top {len(final_picks)} 선정 (빈 슬롯 = 현금 보유)")
     else:
@@ -385,14 +437,15 @@ def run_sentiment_v2():
 
     with open("output_reports/metadata.json", "w") as f:
         json.dump(meta, f)
-        
+
     if final_picks:
         final_df = pd.DataFrame(final_picks)
         final_df.to_csv("output_reports/final_picks_latest.csv", index=False)
-        print(f"✅ 분석 및 소팅 완료. (Final Pick: {len(final_picks)}건 / Step 5 Pass: {buy_count}건)")
+        print(f"✅ MarketAux V3 완료. (Final Pick: {len(final_picks)}건 / Step 5 Pass: {buy_count}건)")
     else:
         pd.DataFrame().to_csv("output_reports/final_picks_latest.csv", index=False)
         print("❌ 최종 통과 종목 없음 (Step 5 기준 미달).")
 
+
 if __name__ == "__main__":
-    run_sentiment_v2()
+    run_sentiment_v3()

@@ -41,8 +41,30 @@ def _gemini_stock_analysis(symbol, name, data_dict):
             text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
             return text
         elif r.status_code == 429:
-            print(f"    ⚠️ Gemini 쿼터 초과 — AI 분석 생략")
+            # 상세 에러 로깅
+            try:
+                err = r.json().get("error", {})
+                print(f"    ⚠️ Gemini 429 상세: {err.get('message', 'N/A')[:200]}")
+            except:
+                print(f"    ⚠️ Gemini 429 (상세 파싱 실패)")
+            
+            # 2초 대기 후 flash-lite로 재시도
+            import time
+            time.sleep(2)
+            fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={GEMINI_API_KEY}"
+            try:
+                r2 = requests.post(fallback_url, json=payload, timeout=10)
+                if r2.status_code == 200:
+                    text = r2.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    print(f"    ✅ flash-lite 폴백 성공 ({symbol})")
+                    return text
+                else:
+                    print(f"    ❌ flash-lite도 실패: HTTP {r2.status_code}")
+            except Exception as e2:
+                print(f"    ❌ flash-lite 폴백 에러: {e2}")
             return ""
+        else:
+            print(f"    ⚠️ Gemini HTTP {r.status_code}: {r.text[:200]}")
     except Exception as e:
         print(f"    ⚠️ Gemini 분석 에러 ({symbol}): {e}")
     return ""

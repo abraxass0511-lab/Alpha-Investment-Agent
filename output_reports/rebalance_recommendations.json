@@ -1,23 +1,23 @@
 {
-  "timestamp": "2026-03-29 05:17",
+  "timestamp": "2026-03-29 05:56",
   "sell": [],
   "buy": [
     {
-      "symbol": "GEV",
-      "name": "GE Vernova",
-      "price": "853.16",
-      "reason": "뉴스 없음 — 펀더멘털 4단계 검증 통과 (📭 No News) | 12-1 모멘텀: 190.01%",
+      "symbol": "FIX",
+      "name": "Comfort Systems USA",
+      "price": "1366.77",
+      "reason": "MarketAux ML 📊 today=0.808 SMA₅=N/A (축적 중) (1/1건, 관련도≥0.8, 출처: seekingalpha.com) | 12-1 모멘텀: 344.77%",
       "action": "BUY"
     },
     {
-      "symbol": "WMB",
-      "name": "Williams Companies",
-      "price": "73.58",
-      "reason": "VADER 규칙 기반 분석 (VADER 📡, Stable 📡, 점수: 0.796) | 12-1 모멘텀: 29.53%",
+      "symbol": "JBL",
+      "name": "Jabil",
+      "price": "261.1",
+      "reason": "MarketAux ML 📊 today=0.803 SMA₅=N/A (축적 중) (2/2건, 관련도≥0.8, 출처: finance.yahoo.com, zacks.com) | 12-1 모멘텀: 100.26%",
       "action": "BUY"
     }
   ],
   "held_count": 0,
-  "scan_passed": 23,
+  "scan_passed": 24,
   "picks_passed": 2
 }

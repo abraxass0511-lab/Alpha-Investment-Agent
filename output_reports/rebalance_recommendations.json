@@ -1,23 +1,8 @@
 {
-  "timestamp": "2026-03-29 07:02",
+  "timestamp": "2026-03-29 07:04",
   "sell": [],
-  "buy": [
-    {
-      "symbol": "FIX",
-      "name": "Comfort Systems USA",
-      "price": "1366.77",
-      "reason": "MarketAux ML 📊 today=0.808 SMA₅=N/A (축적 중) (1/1건, 관련도≥0.8, 출처: seekingalpha.com) | 12-1 모멘텀: 344.77%",
-      "action": "BUY"
-    },
-    {
-      "symbol": "JBL",
-      "name": "Jabil",
-      "price": "261.1",
-      "reason": "MarketAux ML 📊 today=0.803 SMA₅=N/A (축적 중) (2/2건, 관련도≥0.8, 출처: zacks.com, finance.yahoo.com) | 12-1 모멘텀: 100.26%",
-      "action": "BUY"
-    }
-  ],
+  "buy": [],
   "held_count": 0,
   "scan_passed": 24,
-  "picks_passed": 2
+  "picks_passed": 0
 }

@@ -6,37 +6,14 @@
 | 1+2단계 | 체급+내실 | 261건 | 시총$10B+ ROE15%+ | Finnhub |
 | 3단계 | 에너지 | 40건 | 가격 > 50MA | Finnhub |
 | 4단계 | 성장 | 24건 | Surprise 10%+ | Finnhub |
-| 5단계 | 심리 | 2건 | ML점수≥0.7 & SMA₅≥0.6 | MarketAux |
-| 6단계 | Elite 5 | 2건 | 12-1 모멘텀 Top5 | Finnhub |
+| 5단계 | 심리 | 0건 | ML점수≥0.7 & SMA₅≥0.6 | MarketAux |
+| 6단계 | Elite 5 | 0건 | 12-1 모멘텀 Top5 | Finnhub |
 
 *🧠 심층 분석 결과 (최종 승인 대기)*
-*1. Comfort Systems USA (FIX)* 🔥 [BUY]
-   📋 시총: $48,076M | ROE: 48.52%
-   📈 가격: $1366.77 | 50MA: $1310.41
-   🔬 Surprise: 37.3% | Growth: 129.5%
-   ⚡ 12-1 모멘텀: 344.77%
-   • `핵심근거`: MarketAux ML 📊 today=0.808 SMA₅=N/A (축적 중) (1/1건, 관련도≥0.8, 출처: seekingalpha.com) | 12-1 모멘텀: 344.77%
+❌ *조건 부합 종목 없음*
 
-*2. Jabil (JBL)* 🔥 [BUY]
-   📋 시총: $27,571M | ROE: 58.99%
-   📈 가격: $261.1 | 50MA: $255.61
-   🔬 Surprise: 6.2% | Growth: 96.2%
-   ⚡ 12-1 모멘텀: 100.26%
-   • `핵심근거`: MarketAux ML 📊 today=0.803 SMA₅=N/A (축적 중) (2/2건, 관련도≥0.8, 출처: zacks.com, finance.yahoo.com) | 12-1 모멘텀: 100.26%
-
-
-*⚖️ 리밸런싱 추천 (승인 필요)*
-─────────────────
-🟢 *신규 매수 추천: 2종목*
-  📈 *Comfort Systems USA (FIX)*
-     근거: _MarketAux ML 📊 today=0.808 SMA₅=N/A (축적 중) (1/1건, 관련도≥0.8, 출처: seekingalpha.com) | 12-1 모멘텀: 344.77%_
-
-  📈 *Jabil (JBL)*
-     근거: _MarketAux ML 📊 today=0.803 SMA₅=N/A (축적 중) (2/2건, 관련도≥0.8, 출처: zacks.com, finance.yahoo.com) | 12-1 모멘텀: 100.26%_
-
-*🎯 최종 결과: 매수 2종목 변경 추천*
- • "승인" → 매도/매수 자동 집행
- • "반려" → 현재 포트폴리오 유지
+*🎯 최종 결과*
+*🛡️ 가디언 조치*: 정밀 필터링(0.7) 기준 미달. **전액 현금 보유 권고.**
 
 📝 _비고 : Finnhub+MarketAux에서 모든 정보 수집 완료_
 

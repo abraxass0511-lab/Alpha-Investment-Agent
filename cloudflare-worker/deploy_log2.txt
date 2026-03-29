@@ -1,0 +1,13 @@
+﻿
+ ?낉툘 wrangler 4.78.0
+???????????????????
+Total Upload: 36.43 KiB / gzip: 8.24 KiB
+Your Worker has access to the following bindings:
+Binding                                        Resource          
+env.KV (4f92a4f87a04420e93e88b2bc8d5ff33)      KV Namespace      
+
+Uploaded alpha-telegram-bot (3.68 sec)
+Deployed alpha-telegram-bot triggers (2.37 sec)
+  https://alpha-telegram-bot.abraxass0511.workers.dev
+  schedule: 30 14 * * 1-5
+Current Version ID: d1ee7497-a699-4b26-b6a5-8154cf3bd80d

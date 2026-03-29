@@ -69,16 +69,9 @@ var worker_default = {
         }
         const holdings = await getBalance(env);
         const bp = await getBuyingPower(env);
-        let buyingPower = bp ? bp.ord_psbl_frcr_amt || "0" : "0";
-        if (parseFloat(buyingPower) <= 0) {
-          const deposit = await getDeposit(env);
-          if (deposit && deposit.usd_amt) {
-            buyingPower = deposit.usd_amt;
-          }
-        }
         const result = {
           holdings: [],
-          buying_power: buyingPower
+          buying_power: bp ? bp.ord_psbl_frcr_amt || "0" : "0"
         };
         if (holdings && holdings.length > 0) {
           result.holdings = holdings.filter((h) => parseInt(h.ovrs_cblc_qty || "0") > 0).map((h) => ({
@@ -185,74 +178,26 @@ var REPLY_KEYBOARD = {
 };
 var _cachedToken = null;
 var _tokenIssuedAt = 0;
-var TOKEN_TTL = 23 * 3600 * 1e3;
-var KV_TOKEN_KEY = "kis_access_token";
+var TOKEN_TTL = 6 * 3600 * 1e3 - 5 * 60 * 1e3;
 async function getKisToken(env, forceRefresh = false) {
   const now = Date.now();
   if (!forceRefresh && _cachedToken && now - _tokenIssuedAt < TOKEN_TTL) {
     return _cachedToken;
   }
-  if (!forceRefresh && env.KV) {
-    try {
-      const kvData = await env.KV.get(KV_TOKEN_KEY);
-      if (kvData) {
-        const parsed = JSON.parse(kvData);
-        if (parsed.token && now - parsed.issued_at < TOKEN_TTL) {
-          _cachedToken = parsed.token;
-          _tokenIssuedAt = parsed.issued_at;
-          return _cachedToken;
-        }
-      }
-    } catch {
-    }
-  }
-  try {
-    const url = `${env.KIS_BASE_URL}/oauth2/tokenP`;
-    const r = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "client_credentials",
-        appkey: env.KIS_APP_KEY,
-        appsecret: env.KIS_SECRET_KEY
-      })
-    });
-    const data = await r.json();
-    if (data.access_token) {
-      _cachedToken = data.access_token;
-      _tokenIssuedAt = now;
-      if (env.KV) {
-        try {
-          await env.KV.put(KV_TOKEN_KEY, JSON.stringify({
-            token: _cachedToken,
-            issued_at: _tokenIssuedAt
-          }), { expirationTtl: 86400 });
-        } catch {
-        }
-      }
-      return _cachedToken;
-    } else {
-      console.log("Token issue failed:", data.error_description || JSON.stringify(data));
-      if (env.KV) {
-        try {
-          const kvData = await env.KV.get(KV_TOKEN_KEY);
-          if (kvData) {
-            const parsed = JSON.parse(kvData);
-            if (parsed.token) {
-              _cachedToken = parsed.token;
-              _tokenIssuedAt = parsed.issued_at || 0;
-              return _cachedToken;
-            }
-          }
-        } catch {
-        }
-      }
-      return null;
-    }
-  } catch (e) {
-    console.log("Token fetch error:", e.message);
-    return _cachedToken;
-  }
+  const url = `${env.KIS_BASE_URL}/oauth2/tokenP`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "client_credentials",
+      appkey: env.KIS_APP_KEY,
+      appsecret: env.KIS_SECRET_KEY
+    })
+  });
+  const data = await r.json();
+  _cachedToken = data.access_token;
+  _tokenIssuedAt = now;
+  return _cachedToken;
 }
 __name(getKisToken, "getKisToken");
 async function getBalance(env, _retry = false) {
@@ -321,49 +266,6 @@ async function getBuyingPower(env, _retry = false) {
   return null;
 }
 __name(getBuyingPower, "getBuyingPower");
-async function getDeposit(env, _retry = false) {
-  const token = await getKisToken(env);
-  if (!token) return null;
-  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-present-balance`;
-  const params = new URLSearchParams({
-    CANO: env.KIS_CANO,
-    ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
-    WCRC_FRCR_DVSN_CD: "01",
-    NATN_CD: "840",
-    TR_MKET_CD: "00",
-    INQR_DVSN_CD: "00"
-  });
-  const r = await fetch(`${url}?${params}`, {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      appkey: env.KIS_APP_KEY,
-      appsecret: env.KIS_SECRET_KEY,
-      "tr_id": "VTRP6504R"
-    }
-  });
-  const data = await r.json();
-  if (data.rt_cd === "0") {
-    const currencies = data.output2 || [];
-    for (const c of currencies) {
-      if (c.crcy_cd === "USD" && parseFloat(c.frcr_dncl_amt_2 || "0") > 0) {
-        return { usd_amt: c.frcr_dncl_amt_2 };
-      }
-    }
-    const summary = data.output3 || {};
-    if (summary.frcr_evlu_tota || summary.tot_asst_amt) {
-      return { usd_amt: summary.frcr_evlu_tota || summary.tot_asst_amt || "0" };
-    }
-    return null;
-  }
-  if (!_retry) {
-    _cachedToken = null;
-    _tokenIssuedAt = 0;
-    return getDeposit(env, true);
-  }
-  return null;
-}
-__name(getDeposit, "getDeposit");
 async function sellOrder(env, symbol, qty, price) {
   const token = await getKisToken(env);
   if (!token) return false;

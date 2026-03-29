@@ -1,3 +1,7 @@
 Symbol,Name,Price,Momentum(%),Sentiment,ROE(%),MarketCap_M,MA50,Surprise(%),EPS_Growth(%),Status,Reason
+GRMN,Garmin,230.16,2.07,0.34,19.72,44301,225.5,14.2,21.2,REJECT,"VADER 규칙 기반 분석 (VADER 📡, Stable 📡, 점수: 0.34)"
+GEV,GE Vernova,853.16,6.68,0.7,52.35,229952,799.72,-7.4,671.7,BUY (매수 승인 대기),뉴스 없음 — 펀더멘털 4단계 검증 통과 (📭 No News)
+JBL,Jabil,261.1,2.15,0.437,58.99,27571,255.61,6.2,96.2,HOLD (관망/대기),"VADER 규칙 기반 분석 (VADER 📡, Stable 📡, 점수: 0.437)"
+KEYS,Keysight Technologies,279.06,8.61,0.328,16.56,47859,256.94,6.6,68.0,REJECT,"VADER 규칙 기반 분석 (VADER 📡, Stable 📡, 점수: 0.328)"
 TRGP,Targa Resources,250.23,12.66,0.393,71.13,53787,222.12,8.0,74.5,REJECT,"VADER 규칙 기반 분석 (VADER 📡, Stable 📡, 점수: 0.393)"
-WMB,Williams Companies,73.58,4.68,0.398,20.84,94551,70.29,25.3,50.8,REJECT,"VADER 규칙 기반 분석 (VADER 📡, Stable 📡, 점수: 0.398)"
+WMB,Williams Companies,73.58,4.68,0.796,20.84,94551,70.29,25.3,50.8,BUY (매수 승인 대기),"VADER 규칙 기반 분석 (VADER 📡, Stable 📡, 점수: 0.796)"

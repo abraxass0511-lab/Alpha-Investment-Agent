@@ -365,48 +365,11 @@ def report_daily_picks():
     else:
         final_result = "*🎯 최종 결과*\n*🛡️ 가디언 조치*: 정밀 필터링(0.7) 기준 미달. **전액 현금 보유 권고.**\n\n"
 
-    # ── AI 인사이트 (Gemini Flash — 읽기 전용, 숫자 생성 불가) ──
-    ai_insight = ""
-    try:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if api_key and meta:
-            # AI에게 metadata(숫자)를 읽기 전용으로 전달
-            insight_prompt = f"""다음은 오늘 S&P500 주식 스캔 결과입니다 (실제 데이터, 수정 불가):
-
-- 1+2단계(시총$10B+ & ROE15%+): {meta.get('step12', meta.get('step1',0))}건 통과
-- 3단계(50MA돌파): {meta.get('step3',0)}건 통과
-- 4단계(성장): {meta.get('step4',0)}건 통과
-- 5단계(MarketAux ML심리≥0.7 & SMA₅≥0.6): {meta.get('step5',0)}건 통과
-- 6단계(최종): {meta.get('step6',0)}건 선정
-- 최종 종목: {', '.join(buy_stocks) if buy_stocks else '없음'}
-
-⚠️ 중요 규칙:
-1. 위 숫자(통과 건수)는 API 원본이므로 절대 수정하지 마세요
-2. "통과하는 종목이 없었으나" 같은 거짓말 금지 — 위 건수가 실제 통과 건수입니다
-3. 한국어로 2~3문장 시장 코멘트를 작성하세요. 대표님에게 보고하는 말투로."""
-
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": insight_prompt}]}],
-                "generationConfig": {"temperature": 0.5, "maxOutputTokens": 200},
-            }
-            r = requests.post(url, json=payload, timeout=15)
-            if r.status_code == 200:
-                text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                ai_insight = f"*🧠 AI 인사이트 (Gemini Flash)*\n{text}\n\n"
-            elif r.status_code == 429:
-                ai_insight = ""  # 무료 초과시 인사이트 생략 (보고서는 정상 발송)
-    except Exception as e:
-        print(f"⚠️ AI 인사이트 생성 에러 (보고서는 정상 발송): {e}")
-        ai_insight = ""
-
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
     if meta.get("success_all", False):
         footer = "📝 _비고 : Finnhub+MarketAux에서 모든 정보 수집 완료_"
     else:
-        total = meta.get("total", 503)
-        collected = meta.get("step1", 0) + (total - meta.get("step1", 0))  # 수집 시도 수
-        footer = f"📝 _비고 : ⚠️ 데이터 일부 누락 발생 (수집 미완료)_"
+        footer = "📝 _비고 : ⚠️ 데이터 일부 누락 발생 (수집 미완료)_"
 
     # 휴장 안내 (금요일 → 주말 안내, 공휴일 전날 → 공휴일 안내)
     try:
@@ -422,7 +385,7 @@ def report_daily_picks():
     if _now.year == 2027 and _now.month == 12:
         footer += "\n\n🚨 *[관리자 알림] 2028년도 미국장 휴장일 달력 업데이트가 필요합니다! 저(알파)에게 갱신을 요청해 주세요.*"
 
-    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + ai_insight + footer + "\n\n" + portfolio_section
+    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + footer + "\n\n" + portfolio_section
     
     # 3. 로컬 파일 저장 (메모장 대용)
     if not os.path.exists("output_reports"): os.makedirs("output_reports")

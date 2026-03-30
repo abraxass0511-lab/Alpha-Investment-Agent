@@ -1,8 +1,16 @@
 {
-  "timestamp": "2026-03-29 07:04",
+  "timestamp": "2026-03-30 01:08",
   "sell": [],
-  "buy": [],
+  "buy": [
+    {
+      "symbol": "JBL",
+      "name": "Jabil",
+      "price": "261.1",
+      "reason": "MarketAux ML 📊 today=0.948 SMA₅=N/A (축적 중) (2/2건, 관련도≥0.8, 출처: finance.yahoo.com) | 12-1 모멘텀: 100.26%",
+      "action": "BUY"
+    }
+  ],
   "held_count": 0,
   "scan_passed": 24,
-  "picks_passed": 0
+  "picks_passed": 1
 }

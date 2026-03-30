@@ -1,1 +1,2 @@
-
+Symbol,Name,Price,Momentum(%),Sentiment,SMA5,ROE(%),MarketCap_M,MA50,Surprise(%),EPS_Growth(%),Status,Reason,Momentum_12_1
+JBL,Jabil,261.1,2.15,0.948,,58.99,27571,255.61,6.2,96.2,BUY (매수 승인 대기),"MarketAux ML 📊 today=0.948 SMA₅=N/A (축적 중) (2/2건, 관련도≥0.8, 출처: finance.yahoo.com) | 12-1 모멘텀: 100.26%",1.0026

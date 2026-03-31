@@ -52,11 +52,10 @@ def answer_callback(callback_query_id, text=""):
         pass
 
 
-def get_updates(offset=None):
+def get_updates():
+    """Telegram getUpdates — offset 없이 최근 100건 조회 (시간 필터로 중복 방지)"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
-    params = {"timeout": 5, "allowed_updates": ["message", "callback_query"]}
-    if offset:
-        params["offset"] = offset
+    params = {"timeout": 5, "allowed_updates": ["message", "callback_query"], "limit": 100}
     try:
         r = requests.get(url, params=params, timeout=10)
         if r.status_code == 200:
@@ -64,22 +63,6 @@ def get_updates(offset=None):
     except:
         pass
     return []
-
-
-def load_offset():
-    try:
-        if os.path.exists(OFFSET_FILE):
-            with open(OFFSET_FILE, "r") as f:
-                return json.load(f).get("offset", 0)
-    except:
-        pass
-    return 0
-
-
-def save_offset(offset):
-    os.makedirs(os.path.dirname(OFFSET_FILE), exist_ok=True)
-    with open(OFFSET_FILE, "w") as f:
-        json.dump({"offset": offset}, f)
 
 
 # ═══════════════════════════════════════════════════════
@@ -645,10 +628,8 @@ TEXT_HANDLERS = {
 
 
 def process_updates():
-    """새 메시지를 확인하고 처리합니다. (offset 기반 + 시간 필터)"""
-    # 저장된 offset 로드 → 이미 처리한 메시지는 건너뜀
-    offset = load_offset()
-    updates = get_updates(offset=offset if offset else None)
+    """새 메시지를 확인하고 처리합니다. (시간 기반 필터 — offset 불필요)"""
+    updates = get_updates()
 
     if not updates:
         print("📭 새 메시지 없음.")
@@ -755,11 +736,16 @@ def process_updates():
                     print(f"⚠️ AI 에러: {e}")
                     send_message(f"⚠️ AI 답변 생성 에러: {e}", reply_markup=REPLY_KEYBOARD)
 
-    # 마지막 update_id+1을 offset으로 저장 (다음 실행 시 중복 방지)
+    # 처리된 메시지 확인(confirm) → 다음 실행 시 중복 방지
     if updates:
         last_id = updates[-1]["update_id"]
-        save_offset(last_id + 1)
-        print(f"💾 offset 저장: {last_id + 1}")
+        # offset = last_id + 1로 다시 호출하여 Telegram 서버에서 확인 처리
+        confirm_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
+        try:
+            requests.get(confirm_url, params={"offset": last_id + 1, "timeout": 1}, timeout=5)
+            print(f"💾 Telegram 서버 offset 확인: {last_id + 1}")
+        except:
+            pass
 
     print(f"✅ 처리 완료: {processed}건 (전체 {len(updates)}건 중 최근 35분)")
 

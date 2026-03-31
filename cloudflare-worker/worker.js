@@ -7,6 +7,43 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Webhook 등록/해제 관리
+    if (url.pathname === "/setup-webhook") {
+      try {
+        const workerUrl = url.origin;
+        const telegramUrl = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`;
+        const r = await fetch(telegramUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: workerUrl }),
+        });
+        const data = await r.json();
+        return new Response(JSON.stringify({
+          action: "setWebhook",
+          webhook_url: workerUrl,
+          telegram_response: data,
+        }, null, 2), { headers: { "Content-Type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    if (url.pathname === "/webhook-status") {
+      try {
+        const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`);
+        const data = await r.json();
+        return new Response(JSON.stringify(data, null, 2), {
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (url.pathname === "/debug") {
       try {
         const results = {};

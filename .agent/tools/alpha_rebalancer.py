@@ -157,23 +157,15 @@ def get_held_stocks():
 
 def check_held_against_scan(held_stocks, scan_data, picks_data):
     """
-    보유 종목을 1~6단계 기준으로 재검증합니다.
-    
-    ★ 5단계(심리) 비대칭 임계값:
-      - 신규 매수: Sentiment ≥ 0.7 (입구는 좁게)
-      - 기존 보유: Sentiment ≥ 0.5 유지 (출구는 넓게)
-      - 위기 감지: Sentiment < 0.5 → 매도 추천
-    
-    ★ No News Rule:
-      - 보유 종목 뉴스 없음 → "무소식이 희소식" → 유지(Hold)
+    보유 종목을 1~4단계 기준으로 재검증합니다.
     
     - daily_scan_latest.csv에 있음 = 1~4단계 통과
-    - sentiment_all_latest.csv에서 보유종목 센티먼트 확인 (≥ 0.5)
+    - 모멘텀 수치는 참고용으로 표시 (매도 트리거 아님)
     """
     sell_recommendations = []
 
-    # 센티먼트 전체 결과 로드 (보유종목 기준 0.5로 체크)
-    sentiment_data = load_csv("output_reports/sentiment_all_latest.csv")
+    # 모멘텀 데이터 로드 (참고용)
+    momentum_data = load_csv("output_reports/sentiment_all_latest.csv")
 
     for stock in held_stocks:
         sym = stock["symbol"]
@@ -231,21 +223,16 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
             if roe < 15:
                 reasons.append(f"3단계(내실) 탈락: ROE {roe:.1f}% < 15%")
 
-            # ★ 센티먼트 & 모멘텀 수치 추출 (5~6단계)
-            sent_score = 0.5
-            sma5_str = "축적 중"
+            # ★ 모멘텀 수치 추출 (참고용)
             momentum_pct = 0
-            if sym in sentiment_data:
-                sent_row = sentiment_data[sym]
-                sent_score = float(sent_row.get("Sentiment", "0.5") or "0.5")
-                sma5_raw = sent_row.get("SMA5", "")
-                sma5_str = sma5_raw if sma5_raw else "축적 중"
+            if sym in momentum_data:
+                mom_row = momentum_data[sym]
                 try:
-                    momentum_pct = float(sent_row.get("Momentum(%)", "0") or "0")
+                    momentum_pct = float(mom_row.get("Momentum(%)", "0") or "0")
                 except (ValueError, TypeError):
                     momentum_pct = 0
 
-            # ★ 1~6단계 전체 수치 요약 (탈락 시 맥락 제공용)
+            # ★ 1~5단계 전체 수치 요약 (탈락 시 맥락 제공용)
             stage_full_summary = (
                 f"[전체 수치] 시총 ${market_cap_m/1000:.1f}B, "
                 f"ROE {roe:.1f}%, "

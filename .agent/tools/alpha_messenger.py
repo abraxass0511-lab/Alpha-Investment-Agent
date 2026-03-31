@@ -368,39 +368,26 @@ def report_daily_picks():
     # ── 포트폴리오 현황 (최상단 배치) ──
     portfolio_section = get_portfolio_section()
 
-    # V5 메타데이터 호환
+    # V6 메타데이터 (5단계 = 모멘텀)
     s12 = meta.get('step12', 0)
     s3 = meta.get('step3', 0)
     s4 = meta.get('step4', 0)
     s5 = meta.get('step5', 0)
-    s6 = meta.get('step6', 0)
 
     summary_table = "\n*📊 필터 현황 요약 (통과 기준)*\n"
     summary_table += f"| 1+2단계 | 체급+내실 | {s12}건 | 시총$10B+ ROE15%+ | Finnhub |\n"
     summary_table += f"| 3단계 | 에너지 | {s3}건 | 가격 > 50MA | Finnhub |\n"
     summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | Finnhub |\n"
-    summary_table += f"| 5단계 | 심리 | {s5}건 | ML점수≥0.7 & SMA₅≥0.6 | MarketAux |\n"
-    summary_table += f"| 6단계 | Elite 5 | {s6}건 | 12-1 모멘텀 Top5 | Finnhub |\n\n"
+    summary_table += f"| 5단계 | Elite 5 | {s5}건 | 12-1 모멘텀 Top5 | Finnhub |\n\n"
 
-    # ── API 장애 경고 섹션 (5단계/6단계 쿼터 부족 등) ──
+    # ── API 장애 경고 섹션 (5단계 모멘텀 API 실패) ──
     api_warnings = []
-    s5_quota = meta.get('step5_quota_fail', 0)
-    s5_api_err = meta.get('step5_api_error', 0)
-    s5_analyzed = meta.get('step5_analyzed', 0)
-    s5_target = meta.get('step5_total_target', 0)
-    s6_api_fail = meta.get('step6_api_fail', 0)
+    s5_api_fail = meta.get('step5_api_fail', 0)
 
-    if s5_quota > 0:
-        api_warnings.append(f"🚨 *5단계 MarketAux 쿼터 부족*: {s5_quota}/{s5_target}종목 분석 불가 (429/402)")
-    if s5_api_err > 0:
-        api_warnings.append(f"⚠️ *5단계 MarketAux API 오류*: {s5_api_err}종목 데이터 수집 실패")
-    if s5_target > 0 and s5_analyzed == 0 and (s5_quota > 0 or s5_api_err > 0):
-        api_warnings.append(f"❌ *5단계 전면 중단*: 대상 {s5_target}종목 중 0종목 분석 완료 (API 장애)")
-    if s6_api_fail > 0:
-        api_warnings.append(f"⚠️ *6단계 모멘텀 API 실패*: {s6_api_fail}종목 데이터 수집 불가 (Finnhub+Yahoo)")
+    if s5_api_fail > 0:
+        api_warnings.append(f"⚠️ *5단계 모멘텀 API 실패*: {s5_api_fail}종목 데이터 수집 불가 (Finnhub+Yahoo)")
 
     # ★ Gemini AI 코멘트 실패도 추적 (보고서 생성 후 카운터 확인)
-    # (Gemini 실패 카운터는 보고서 조립 후 체크 — 아래 footer 직전에서 처리)
 
     api_warning_section = ""
     if api_warnings:
@@ -408,7 +395,7 @@ def report_daily_picks():
         api_warning_section += "─────────────────\n"
         for w in api_warnings:
             api_warning_section += f"{w}\n"
-        api_warning_section += "\n💡 _쿼터 부족으로 분석이 불완전할 수 있습니다. 결과를 참고용으로만 활용해 주세요._\n\n"
+        api_warning_section += "\n💡 _API 장애로 분석이 불완전할 수 있습니다. 결과를 참고용으로만 활용해 주세요._\n\n"
     
     summary_table += api_warning_section
 
@@ -417,13 +404,14 @@ def report_daily_picks():
     
     if os.path.exists(picks_file) and os.path.getsize(picks_file) > 50:
         df = pd.read_csv(picks_file)
-        if 'Sentiment' in df.columns:
-            df_final = df[df['Sentiment'] >= 0.7]
+        # V6: Sentiment 필터 없이, BUY 상태인 종목만 표시
+        if 'Status' in df.columns:
+            df_final = df[df['Status'].str.contains('BUY', na=False)]
         else:
-            df_final = pd.DataFrame()
+            df_final = df  # Status 컬럼 없으면 전체 표시
             
         if df_final.empty:
-            analysis_section += "❌ *5단계 통과 종목(0.7점 이상) 없음*\n\n"
+            analysis_section += "❌ *조건 부합 종목(양수 모멘텀) 없음*\n\n"
         else:
             picks_content = ""
             for i, row in df_final.iterrows():
@@ -452,7 +440,7 @@ def report_daily_picks():
                 ai_comment = _gemini_stock_analysis(symbol, name, {
                     "시총(M)": mcap, "ROE(%)": roe_val, "현재가": price,
                     "50MA": ma50, "Surprise(%)": surprise, "EPS성장(%)": eps_g,
-                    "12-1모멘텀(%)": mom_pct, "심리점수": reason,
+                    "12-1모멘텀(%)": mom_pct, "매수근거": reason,
                 })
                 if ai_comment:
                     picks_content += f"   🧠 _{ai_comment}_\n"
@@ -549,17 +537,13 @@ def report_daily_picks():
             summary_table += api_warning_section
 
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
-    has_api_issues = (s5_quota > 0 or s5_api_err > 0 or s6_api_fail > 0 or gemini_fails > 0)
+    has_api_issues = (s5_api_fail > 0 or gemini_fails > 0)
     if meta.get("success_all", False) and not has_api_issues:
-        footer = "📝 _비고 : Finnhub+MarketAux에서 모든 정보 수집 완료_"
+        footer = "📝 _비고 : Finnhub에서 모든 정보 수집 완료_"
     elif meta.get("success_all", False) and has_api_issues:
         issue_parts = []
-        if s5_quota > 0:
-            issue_parts.append(f"MarketAux 쿼터 부족({s5_quota}건)")
-        if s5_api_err > 0:
-            issue_parts.append(f"MarketAux API 오류({s5_api_err}건)")
-        if s6_api_fail > 0:
-            issue_parts.append(f"6단계 모멘텀 API 실패({s6_api_fail}건)")
+        if s5_api_fail > 0:
+            issue_parts.append(f"5단계 모멘텀 API 실패({s5_api_fail}건)")
         if gemini_fails > 0:
             issue_parts.append(f"Gemini AI 쿼터 부족({gemini_fails}건)")
         footer = f"📝 _비고 : ⚠️ 1~4단계 정상 수집, 단 {' / '.join(issue_parts)}_"

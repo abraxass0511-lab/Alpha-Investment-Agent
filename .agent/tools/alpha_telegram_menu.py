@@ -458,12 +458,11 @@ def handle_today_scan():
         msg += f"`1+2단계` 체급+내실 : {meta.get('total', 503)} → *{step12}건*\n"
         msg += f"`3단계` 에너지 : → *{meta.get('step3', 0)}건*\n"
         msg += f"`4단계` 성장   : → *{meta.get('step4', 0)}건*\n"
-        msg += f"`5단계` 심리(ML≥0.7 & SMA₅≥0.6) : → *{meta.get('step5', 0)}건*\n"
-        msg += f"`6단계` 기세   : → *{meta.get('step6', 0)}건*\n\n"
+        msg += f"`5단계` 모멘텀 Elite 5 : → *{meta.get('step5', 0)}건*\n\n"
 
-        step6 = meta.get('step6', 0)
-        if step6 > 0:
-            msg += f"🔥 최종 통과 종목 *{step6}개*! 리포트를 확인해 주세요."
+        step5 = meta.get('step5', 0)
+        if step5 > 0:
+            msg += f"🔥 최종 통과 종목 *{step5}개*! 리포트를 확인해 주세요."
         else:
             msg += "🛡️ 오늘은 기준 충족 종목이 없습니다. 현금 보유 권고!"
 

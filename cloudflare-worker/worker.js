@@ -145,11 +145,89 @@ export default {
     return new Response("OK");
   },
 
-  // Cron Trigger: market open (23:30 KST)
+  // Cron Trigger: market open + 체결 확인 폴링
   async scheduled(event, env, ctx) {
     try {
-      // 주말 및 미국 공휴일에는 실행하지 않고 예약 상태를 그대로 유지 (다음 거래일에 실행되도록)
       if (!isTradingDay(new Date())) return;
+
+      // === A. 체결 확인 폴링 (5분 간격 cron에서 실행) ===
+      const fillPend = await env.KV.get("pending_fill_check");
+      if (fillPend) {
+        const fillData = JSON.parse(fillPend);
+        const nowUTC = new Date();
+        const etHour = (nowUTC.getUTCHours() - 5 + 24) % 24;
+
+        // 체결 내역 조회 (장 마감 시에도 최종 확인 실행)
+        const orders = await checkOrderFills(env);
+
+        // API 호출 실패 시 에러 알림 (조용히 넘기지 않음)
+        if (!orders) {
+          // 장 마감이면 정리하면서 실패 알림
+          if (etHour >= 16 && etHour < 21) {
+            await sendMessage(env, "\u26a0\ufe0f *[\uccb4\uacb0 \ud655\uc778 \uc2e4\ud328]*\n\n\uc7a5 \ub9c8\uac10\uae4c\uc9c0 \uccb4\uacb0 \ub0b4\uc5ed \uc870\ud68c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\nKIS API \uc751\ub2f5 \uc624\ub958\uc785\ub2c8\ub2e4, \ub300\ud45c\ub2d8.\n\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \uccb4\uacb0 \uc5ec\ubd80\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.", REPLY_KEYBOARD);
+            await env.KV.delete("pending_fill_check");
+          }
+          // 장 중이면 다음 cron에서 재시도
+          return;
+        }
+
+        const symbols = fillData.symbols || [];
+        let filledAll = true;
+        let msg = "\ud83d\udcca *[\uccb4\uacb0 \uc54c\ub9bc]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+        let filledCount = 0;
+
+        if (orders.length > 0) {
+          for (const ord of orders) {
+            const sym = ord.pdno || ord.ovrs_pdno || "?";
+            if (symbols.length > 0 && !symbols.includes(sym)) continue;
+
+            const side = ord.sll_buy_dvsn_cd === "02" ? "\ub9e4\uc218" : "\ub9e4\ub3c4";
+            const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
+            const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
+            const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
+
+            if (fillQty > 0) {
+              filledCount++;
+              const emoji = side === "\ub9e4\uc218" ? "\u2705" : "\ud83d\udd3b";
+              msg += `${emoji} *${sym}* ${side} \uccb4\uacb0 \uc644\ub8cc!\n`;
+              msg += `   \ud83d\udcca ${fillQty}\uc8fc \u00d7 $${parseFloat(fillPrice).toFixed(2)}\n\n`;
+            } else {
+              filledAll = false;
+            }
+          }
+        }
+
+        if (filledCount > 0 && filledAll) {
+          // 전부 체결 → 알림 보내고 KV 삭제
+          await sendMessage(env, msg, REPLY_KEYBOARD);
+          await env.KV.delete("pending_fill_check");
+        } else if (filledCount > 0 && !filledAll) {
+          // 일부만 체결 → 체결된 것 알리고 계속 대기
+          msg += "_\ub098\uba38\uc9c0 \uc885\ubaa9 \uccb4\uacb0 \ub300\uae30 \uc911..._";
+          await sendMessage(env, msg, REPLY_KEYBOARD);
+        } else if (etHour >= 16 && etHour < 21) {
+          // 장 마감인데 체결 감지 못함 → 최종 알림 후 정리
+          let closeMsg = "\ud83d\udd52 *[\uc7a5 \ub9c8\uac10 \uccb4\uacb0 \ud655\uc778]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+          if (orders.length === 0) {
+            closeMsg += "\u26a0\ufe0f \uc624\ub298 \uc8fc\ubb38 \ub0b4\uc5ed\uc774 \uc870\ud68c\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.\n";
+          } else {
+            closeMsg += "\u26a0\ufe0f \uccb4\uacb0 \uac10\uc9c0\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\n";
+            closeMsg += `\ud83d\udcdd \uc870\ud68c\ub41c \uc8fc\ubb38: ${orders.length}\uac74\n`;
+            // 디버깅용: 첫 번째 주문의 필드명 출력
+            if (orders[0]) {
+              const keys = Object.keys(orders[0]).join(", ");
+              closeMsg += `\ud83d\udd0d \uc751\ub2f5 \ud544\ub4dc: _${keys.substring(0, 200)}_\n`;
+            }
+          }
+          closeMsg += "\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \ud655\uc778\ud574 \uc8fc\uc138\uc694, \ub300\ud45c\ub2d8.";
+          await sendMessage(env, closeMsg, REPLY_KEYBOARD);
+          await env.KV.delete("pending_fill_check");
+        }
+        // 장 중 + filledCount === 0 → 다음 cron에서 재시도
+        return;  // 체결 확인 모드에서는 여기서 종료
+      }
+
+      // === B. 예약 주문 실행 (장 개장 cron에서 실행) ===
 
       // 1. 긴급 전량 매도 예약 실행
       const sellPend = await env.KV.get("pending_sell");
@@ -157,7 +235,7 @@ export default {
         const data = JSON.parse(sellPend);
         if (data.type === "sell_all") {
           const result = await executeEmergencySell(env);
-          await sendMessage(env, "⏰ *[예약 매도 실행]*\n\n" + result, REPLY_KEYBOARD);
+          await sendMessage(env, "\u23f0 *[\uc608\uc57d \ub9e4\ub3c4 \uc2e4\ud589]*\n\n" + result, REPLY_KEYBOARD);
         }
         await env.KV.delete("pending_sell");
       }
@@ -168,12 +246,18 @@ export default {
         const data = JSON.parse(appPend);
         if (data.type === "approval") {
           const result = await executeApproval(env);
-          await sendMessage(env, "⏰ *[예약 승인(매수/매도) 자동 집행]*\n\n" + result, REPLY_KEYBOARD);
+          if (typeof result === "string") {
+            await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778]*\n\n" + result, REPLY_KEYBOARD);
+          } else {
+            await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778 \u2192 \uc8fc\ubb38 \uc811\uc218]*\n\n" + result.msg, REPLY_KEYBOARD);
+            // KV에 체결 확인 대상 저장 → 5분 간격 cron이 확인
+            await saveFillCheckToKV(env, result.orderedSymbols);
+          }
         }
         await env.KV.delete("pending_approval");
       }
     } catch (e) {
-      await sendMessage(env, "⚠️ 예약 실행 중 에러: " + e.message, REPLY_KEYBOARD);
+      await sendMessage(env, "\u26a0\ufe0f \uc608\uc57d \uc2e4\ud589 \uc911 \uc5d0\ub7ec: " + e.message, REPLY_KEYBOARD);
     }
   }
 };
@@ -471,6 +555,56 @@ async function buyOrder(env, symbol, qty, price) {
   return data.rt_cd === "0";
 }
 
+// === 체결 확인 함수 (KIS 주문체결내역 조회) ===
+async function checkOrderFills(env) {
+  const token = await getKisToken(env);
+  if (!token) return null;
+
+  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-ccnl`;
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const params = new URLSearchParams({
+    CANO: env.KIS_CANO,
+    ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+    PDNO: "",
+    ORD_STRT_DT: today,
+    ORD_END_DT: today,
+    SLL_BUY_DVSN: "00",
+    CCLD_NCCS_DVSN: "00",
+    OVRS_EXCG_CD: "",
+    SORT_SQN: "DS",
+    ORD_DT: "",
+    ORD_GNO_BRNO: "",
+    ODNO: "",
+    CTX_AREA_NK200: "",
+    CTX_AREA_FK200: "",
+  });
+
+  const r = await fetch(`${url}?${params}`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      appkey: env.KIS_APP_KEY,
+      appsecret: env.KIS_SECRET_KEY,
+      "tr_id": "VTTS3035R",
+    },
+  });
+
+  const data = await r.json();
+  if (data.rt_cd === "0") {
+    return data.output || [];
+  }
+  return null;
+}
+
+// KV에 체결 확인 대상 저장 (cron이 5분 간격으로 확인)
+async function saveFillCheckToKV(env, orderedSymbols) {
+  if (!env.KV || !orderedSymbols || orderedSymbols.length === 0) return;
+  await env.KV.put("pending_fill_check", JSON.stringify({
+    symbols: orderedSymbols,
+    ordered_at: new Date().toISOString(),
+  }));
+}
+
 async function executeApproval(env) {
   try {
     // 1. GitHub에서 최종 추천 종목 조회
@@ -521,7 +655,7 @@ async function executeApproval(env) {
       for (const s of sellStocks) {
         const ok = await sellOrder(env, s.symbol, s.qty, s.current);
         sellMsg += ok
-          ? `  \u2705 ${s.symbol} ${s.qty}\uc8fc \u00d7 $${s.current.toFixed(2)} \ub9e4\ub3c4 \uc644\ub8cc\n`
+          ? `  \u2705 ${s.symbol} ${s.qty}\uc8fc \u00d7 $${s.current.toFixed(2)} \ub9e4\ub3c4 \uc8fc\ubb38 \uc811\uc218\n`
           : `  \u274c ${s.symbol} \ub9e4\ub3c4 \uc2e4\ud328\n`;
       }
       sellMsg += "\n";
@@ -555,7 +689,7 @@ async function executeApproval(env) {
             }
             const ok = await buyOrder(env, s.symbol, qty, s.price.toFixed(2));
             buyMsg += ok
-              ? `  \u2705 ${s.symbol} ${qty}\uc8fc \u00d7 $${s.price.toFixed(2)} \ub9e4\uc218 \uc644\ub8cc\n`
+              ? `  \u2705 ${s.symbol} ${qty}\uc8fc \u00d7 $${s.price.toFixed(2)} \ub9e4\uc218 \uc8fc\ubb38 \uc811\uc218\n`
               : `  \u274c ${s.symbol} \ub9e4\uc218 \uc2e4\ud328\n`;
           }
           buyMsg += "\n";
@@ -563,10 +697,16 @@ async function executeApproval(env) {
       }
     }
 
-    // \ud45c\uc2dc: \ub9e4\uc218 \uba3c\uc800, \ub9e4\ub3c4 \ub098\uc911\uc5d0
+    // 표시: 매수 먼저, 매도 나중에
     msg += buyMsg + sellMsg;
 
-    return msg;
+    // 주문한 종목 목록 수집 (체결 확인용)
+    const orderedSymbols = [
+      ...sellStocks.map(s => s.symbol),
+      ...buyStocks.map(s => s.symbol),
+    ];
+
+    return { msg, orderedSymbols };
   } catch (e) {
     return "\u26a0\ufe0f \uc2b9\uc778 \ucc98\ub9ac \uc5d0\ub7ec: " + e.message;
   }
@@ -575,7 +715,11 @@ async function executeApproval(env) {
 async function handleApproval(env) {
   if (isMarketOpen()) {
     // Market open -> execute immediately
-    return await executeApproval(env);
+    const result = await executeApproval(env);
+    if (typeof result === "string") return result;
+    // KV에 체결 확인 대상 저장 → 5분 간격 cron이 확인
+    await saveFillCheckToKV(env, result.orderedSymbols);
+    return result.msg;
   } else {
     // Market closed -> save reservation to KV
     if (env.KV) {
@@ -585,7 +729,7 @@ async function handleApproval(env) {
       }));
       return "✅ *승인 예약 완료!*\n\n" +
         "🕒 미국 장 개장(23:30 KST) 시 자동 매수/매도를 실행합니다.\n" +
-        "📥 결과는 텔레그램으로 알려드리겠습니다, 대표님.\n\n" +
+        "📥 주문 접수 + 체결 확인 알림을 별도로 보내드리겠습니다, 대표님.\n\n" +
         "취소하려면 \"예약취소\" 라고 입력해 주세요.";
     } else {
       return "⚠️ KV 저장소가 연결되지 않았습니다.";
@@ -852,7 +996,7 @@ async function handleAiChat(env, question) {
   try {
     if (!env.GEMINI_API_KEY) return "\u26a0\ufe0f AI \uc5d4\uc9c4\uc774 \uc5f0\uacb0\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.";
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
     
     let ctx = "";
     try {

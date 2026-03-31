@@ -16,10 +16,95 @@ import os
 import sys
 import json
 import csv
+import requests
 from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
+
+FINNHUB_KEY = os.getenv("FINNHUB_API_KEY")
+
+
+def diagnose_scan_failure(symbol):
+    """
+    보유 종목이 스캔에서 빠진 원인을 단계별로 진단합니다.
+    Yahoo Finance + Finnhub를 직접 조회하여 정확한 탈락 사유를 파악합니다.
+    """
+    reasons = []
+    diag = {}  # 진단 데이터 저장
+
+    # === 1+2단계: 시총 & ROE ===
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(symbol)
+        info = tk.info
+
+        mcap = info.get("marketCap", 0) or 0
+        mcap_b = mcap / 1e9
+        diag["mcap_b"] = round(mcap_b, 1)
+
+        roe_raw = info.get("returnOnEquity", 0)
+        roe_pct = (roe_raw * 100) if roe_raw and abs(roe_raw) < 5 else (roe_raw or 0)
+        diag["roe"] = round(roe_pct, 1)
+
+        if mcap_b < 10:
+            reasons.append(f"1단계(체급) 탈락: 시총 ${mcap_b:.1f}B < $10B")
+        if roe_pct < 15:
+            reasons.append(f"2단계(내실) 탈락: ROE {roe_pct:.1f}% < 15%")
+
+        # === 3단계: Price > 50MA ===
+        hist = tk.history(period="3mo")
+        if len(hist) >= 50:
+            current_price = float(hist["Close"].iloc[-1])
+            ma50 = float(hist["Close"].tail(50).mean())
+            diag["price"] = round(current_price, 2)
+            diag["ma50"] = round(ma50, 2)
+
+            if current_price <= ma50:
+                reasons.append(
+                    f"3단계(에너지) 탈락: 종가 ${current_price:.2f} < 50MA ${ma50:.2f}"
+                )
+        else:
+            reasons.append("3단계 진단 불가: 캔들 데이터 부족")
+
+    except Exception as e:
+        reasons.append(f"Yahoo 진단 실패: {e}")
+
+    # === 4단계: Surprise / Growth (Finnhub) ===
+    if not reasons:  # 1~3단계 통과했는데 빠졌으면 4단계 체크
+        try:
+            if FINNHUB_KEY:
+                url = f"https://finnhub.io/api/v1/stock/earnings"
+                r = requests.get(url, params={"symbol": symbol, "limit": 8, "token": FINNHUB_KEY}, timeout=10)
+                if r.status_code == 200:
+                    data = r.json()
+                    if data and isinstance(data, list) and len(data) > 0:
+                        surprise = data[0].get("surprisePercent", 0) or 0
+                        diag["surprise"] = round(surprise, 1)
+
+                        eps_growth = 0
+                        if len(data) >= 5:
+                            cur = data[0].get("actual")
+                            yoy = data[4].get("actual")
+                            if cur is not None and yoy is not None and yoy != 0:
+                                eps_growth = round(((cur - yoy) / abs(yoy)) * 100, 1)
+                        diag["growth"] = eps_growth
+
+                        if surprise < 10 and eps_growth < 20:
+                            reasons.append(
+                                f"4단계(성장) 탈락: Surprise {surprise:.1f}% < 10% & Growth {eps_growth:.1f}% < 20%"
+                            )
+                    else:
+                        reasons.append("4단계(성장) 탈락: 어닝 데이터 조회 불가")
+            else:
+                reasons.append("4단계 진단 불가: FINNHUB_API_KEY 미설정")
+        except Exception as e:
+            reasons.append(f"4단계 Finnhub 진단 실패: {e}")
+
+    if not reasons:
+        reasons.append("탈락 원인 특정 불가 — API 데이터와 스캔 결과 불일치")
+
+    return reasons, diag
 
 
 def load_csv(filepath):
@@ -145,8 +230,14 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
                 pass
 
         else:
-            # 스캔에 없음 → 1~4단계 중 탈락
-            reasons.append("1~4단계 탈락: 오늘 스캔에서 기준 미달로 제외됨")
+            # 스캔에 없음 → 어느 단계에서 탈락했는지 진단
+            print(f"   🔍 {sym} 스캔 미포함 → 탈락 원인 진단 중...")
+            diag_reasons, diag_data = diagnose_scan_failure(sym)
+            for dr in diag_reasons:
+                reasons.append(dr)
+            if diag_data:
+                diag_summary = ", ".join(f"{k}={v}" for k, v in diag_data.items())
+                print(f"   📊 {sym} 진단 데이터: {diag_summary}")
 
         if reasons:
             sell_recommendations.append({

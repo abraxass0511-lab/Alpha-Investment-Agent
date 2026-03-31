@@ -1,2 +1,6 @@
-Symbol,Name,Price,Momentum(%),Sentiment,SMA5,ROE(%),MarketCap_M,MA50,Surprise(%),EPS_Growth(%),Status,Reason,Momentum_12_1
-T,AT&T,28.78,5.78,0.733,0.608,20.41,203682,27.21,10.2,-5.6,BUY (매수 승인 대기),"MarketAux ML 📊 today=0.733 SMA₅=0.608 (3/3건, 관련도≥0.8, 출처: seekingalpha.com, zacks.com) | 12-1 모멘텀: 3.38%",0.0338
+Symbol,Name,Price,Momentum(%),ROE(%),MarketCap_M,MA50,Surprise(%),EPS_Growth(%),Momentum_12_1,Status,Reason
+LITE,Lumentum,654.79,12.12,27.64,46752,583.98,17.4,201.1,10.2433,BUY (매수 승인 대기),12-1 모멘텀: 1024.33% | Top 5 선정
+VRT,Vertiv,234.22,1.12,40.26,104683,231.64,5.1,199.5,2.5339,BUY (매수 승인 대기),12-1 모멘텀: 253.39% | Top 5 선정
+GEV,GE Vernova,817.35,1.76,52.35,229952,803.23,-7.4,671.7,1.8684,BUY (매수 승인 대기),12-1 모멘텀: 186.84% | Top 5 선정
+KEYS,Keysight Technologies,269.41,4.41,16.56,46808,258.04,6.6,68.0,1.052,BUY (매수 승인 대기),12-1 모멘텀: 105.2% | Top 5 선정
+DELL,Dell Technologies,164.66,21.99,130.7,110946,134.98,8.1,57.3,0.6547,BUY (매수 승인 대기),12-1 모멘텀: 65.47% | Top 5 선정

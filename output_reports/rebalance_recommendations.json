@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-31 02:27",
+  "timestamp": "2026-03-31 03:03",
   "sell": [
     {
       "symbol": "JBL",
@@ -16,14 +16,42 @@
   ],
   "buy": [
     {
-      "symbol": "T",
-      "name": "AT&T",
-      "price": "28.78",
-      "reason": "MarketAux ML 📊 today=0.733 SMA₅=0.608 (3/3건, 관련도≥0.8, 출처: seekingalpha.com, zacks.com) | 12-1 모멘텀: 3.38%",
+      "symbol": "LITE",
+      "name": "Lumentum",
+      "price": "654.79",
+      "reason": "12-1 모멘텀: 1024.33% | Top 5 선정",
+      "action": "BUY"
+    },
+    {
+      "symbol": "VRT",
+      "name": "Vertiv",
+      "price": "234.22",
+      "reason": "12-1 모멘텀: 253.39% | Top 5 선정",
+      "action": "BUY"
+    },
+    {
+      "symbol": "GEV",
+      "name": "GE Vernova",
+      "price": "817.35",
+      "reason": "12-1 모멘텀: 186.84% | Top 5 선정",
+      "action": "BUY"
+    },
+    {
+      "symbol": "KEYS",
+      "name": "Keysight Technologies",
+      "price": "269.41",
+      "reason": "12-1 모멘텀: 105.2% | Top 5 선정",
+      "action": "BUY"
+    },
+    {
+      "symbol": "DELL",
+      "name": "Dell Technologies",
+      "price": "164.66",
+      "reason": "12-1 모멘텀: 65.47% | Top 5 선정",
       "action": "BUY"
     }
   ],
   "held_count": 1,
   "scan_passed": 23,
-  "picks_passed": 1
+  "picks_passed": 5
 }

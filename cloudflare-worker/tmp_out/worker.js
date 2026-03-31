@@ -69,9 +69,16 @@ var worker_default = {
         }
         const holdings = await getBalance(env);
         const bp = await getBuyingPower(env);
+        let buyingPower = bp ? bp.ord_psbl_frcr_amt || "0" : "0";
+        if (parseFloat(buyingPower) <= 0) {
+          const deposit = await getDeposit(env);
+          if (deposit && deposit.usd_amt) {
+            buyingPower = deposit.usd_amt;
+          }
+        }
         const result = {
           holdings: [],
-          buying_power: bp ? bp.ord_psbl_frcr_amt || "0" : "0"
+          buying_power: buyingPower
         };
         if (holdings && holdings.length > 0) {
           result.holdings = holdings.filter((h) => parseInt(h.ovrs_cblc_qty || "0") > 0).map((h) => ({
@@ -125,10 +132,74 @@ var worker_default = {
     }
     return new Response("OK");
   },
-  // Cron Trigger: market open (23:30 KST)
+  // Cron Trigger: market open + 체결 확인 폴링
   async scheduled(event, env, ctx) {
     try {
       if (!isTradingDay(/* @__PURE__ */ new Date())) return;
+      const fillPend = await env.KV.get("pending_fill_check");
+      if (fillPend) {
+        const fillData = JSON.parse(fillPend);
+        const nowUTC = /* @__PURE__ */ new Date();
+        const etHour = (nowUTC.getUTCHours() - 5 + 24) % 24;
+        const orders = await checkOrderFills(env);
+        if (!orders) {
+          if (etHour >= 16 && etHour < 21) {
+            await sendMessage(env, "\u26A0\uFE0F *[\uCCB4\uACB0 \uD655\uC778 \uC2E4\uD328]*\n\n\uC7A5 \uB9C8\uAC10\uAE4C\uC9C0 \uCCB4\uACB0 \uB0B4\uC5ED \uC870\uD68C\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.\nKIS API \uC751\uB2F5 \uC624\uB958\uC785\uB2C8\uB2E4, \uB300\uD45C\uB2D8.\n\n\u{1F4B1} KIS \uC571\uC5D0\uC11C \uC9C1\uC811 \uCCB4\uACB0 \uC5EC\uBD80\uB97C \uD655\uC778\uD574 \uC8FC\uC138\uC694.", REPLY_KEYBOARD);
+            await env.KV.delete("pending_fill_check");
+          }
+          return;
+        }
+        const symbols = fillData.symbols || [];
+        let filledAll = true;
+        let msg = "\u{1F4CA} *[\uCCB4\uACB0 \uC54C\uB9BC]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+        let filledCount = 0;
+        if (orders.length > 0) {
+          for (const ord of orders) {
+            const sym = ord.pdno || ord.ovrs_pdno || "?";
+            if (symbols.length > 0 && !symbols.includes(sym)) continue;
+            const side = ord.sll_buy_dvsn_cd === "02" ? "\uB9E4\uC218" : "\uB9E4\uB3C4";
+            const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
+            const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
+            const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
+            if (fillQty > 0) {
+              filledCount++;
+              const emoji = side === "\uB9E4\uC218" ? "\u2705" : "\u{1F53B}";
+              msg += `${emoji} *${sym}* ${side} \uCCB4\uACB0 \uC644\uB8CC!
+`;
+              msg += `   \u{1F4CA} ${fillQty}\uC8FC \xD7 $${parseFloat(fillPrice).toFixed(2)}
+
+`;
+            } else {
+              filledAll = false;
+            }
+          }
+        }
+        if (filledCount > 0 && filledAll) {
+          await sendMessage(env, msg, REPLY_KEYBOARD);
+          await env.KV.delete("pending_fill_check");
+        } else if (filledCount > 0 && !filledAll) {
+          msg += "_\uB098\uBA38\uC9C0 \uC885\uBAA9 \uCCB4\uACB0 \uB300\uAE30 \uC911..._";
+          await sendMessage(env, msg, REPLY_KEYBOARD);
+        } else if (etHour >= 16 && etHour < 21) {
+          let closeMsg = "\u{1F552} *[\uC7A5 \uB9C8\uAC10 \uCCB4\uACB0 \uD655\uC778]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+          if (orders.length === 0) {
+            closeMsg += "\u26A0\uFE0F \uC624\uB298 \uC8FC\uBB38 \uB0B4\uC5ED\uC774 \uC870\uD68C\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.\n";
+          } else {
+            closeMsg += "\u26A0\uFE0F \uCCB4\uACB0 \uAC10\uC9C0\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.\n";
+            closeMsg += `\u{1F4DD} \uC870\uD68C\uB41C \uC8FC\uBB38: ${orders.length}\uAC74
+`;
+            if (orders[0]) {
+              const keys = Object.keys(orders[0]).join(", ");
+              closeMsg += `\u{1F50D} \uC751\uB2F5 \uD544\uB4DC: _${keys.substring(0, 200)}_
+`;
+            }
+          }
+          closeMsg += "\n\u{1F4B1} KIS \uC571\uC5D0\uC11C \uC9C1\uC811 \uD655\uC778\uD574 \uC8FC\uC138\uC694, \uB300\uD45C\uB2D8.";
+          await sendMessage(env, closeMsg, REPLY_KEYBOARD);
+          await env.KV.delete("pending_fill_check");
+        }
+        return;
+      }
       const sellPend = await env.KV.get("pending_sell");
       if (sellPend) {
         const data = JSON.parse(sellPend);
@@ -143,7 +214,12 @@ var worker_default = {
         const data = JSON.parse(appPend);
         if (data.type === "approval") {
           const result = await executeApproval(env);
-          await sendMessage(env, "\u23F0 *[\uC608\uC57D \uC2B9\uC778(\uB9E4\uC218/\uB9E4\uB3C4) \uC790\uB3D9 \uC9D1\uD589]*\n\n" + result, REPLY_KEYBOARD);
+          if (typeof result === "string") {
+            await sendMessage(env, "\u23F0 *[\uC608\uC57D \uC2B9\uC778]*\n\n" + result, REPLY_KEYBOARD);
+          } else {
+            await sendMessage(env, "\u23F0 *[\uC608\uC57D \uC2B9\uC778 \u2192 \uC8FC\uBB38 \uC811\uC218]*\n\n" + result.msg, REPLY_KEYBOARD);
+            await saveFillCheckToKV(env, result.orderedSymbols);
+          }
         }
         await env.KV.delete("pending_approval");
       }
@@ -178,26 +254,74 @@ var REPLY_KEYBOARD = {
 };
 var _cachedToken = null;
 var _tokenIssuedAt = 0;
-var TOKEN_TTL = 6 * 3600 * 1e3 - 5 * 60 * 1e3;
+var TOKEN_TTL = 23 * 3600 * 1e3;
+var KV_TOKEN_KEY = "kis_access_token";
 async function getKisToken(env, forceRefresh = false) {
   const now = Date.now();
   if (!forceRefresh && _cachedToken && now - _tokenIssuedAt < TOKEN_TTL) {
     return _cachedToken;
   }
-  const url = `${env.KIS_BASE_URL}/oauth2/tokenP`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: env.KIS_APP_KEY,
-      appsecret: env.KIS_SECRET_KEY
-    })
-  });
-  const data = await r.json();
-  _cachedToken = data.access_token;
-  _tokenIssuedAt = now;
-  return _cachedToken;
+  if (!forceRefresh && env.KV) {
+    try {
+      const kvData = await env.KV.get(KV_TOKEN_KEY);
+      if (kvData) {
+        const parsed = JSON.parse(kvData);
+        if (parsed.token && now - parsed.issued_at < TOKEN_TTL) {
+          _cachedToken = parsed.token;
+          _tokenIssuedAt = parsed.issued_at;
+          return _cachedToken;
+        }
+      }
+    } catch {
+    }
+  }
+  try {
+    const url = `${env.KIS_BASE_URL}/oauth2/tokenP`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "client_credentials",
+        appkey: env.KIS_APP_KEY,
+        appsecret: env.KIS_SECRET_KEY
+      })
+    });
+    const data = await r.json();
+    if (data.access_token) {
+      _cachedToken = data.access_token;
+      _tokenIssuedAt = now;
+      if (env.KV) {
+        try {
+          await env.KV.put(KV_TOKEN_KEY, JSON.stringify({
+            token: _cachedToken,
+            issued_at: _tokenIssuedAt
+          }), { expirationTtl: 86400 });
+        } catch {
+        }
+      }
+      return _cachedToken;
+    } else {
+      console.log("Token issue failed:", data.error_description || JSON.stringify(data));
+      if (env.KV) {
+        try {
+          const kvData = await env.KV.get(KV_TOKEN_KEY);
+          if (kvData) {
+            const parsed = JSON.parse(kvData);
+            if (parsed.token) {
+              _cachedToken = parsed.token;
+              _tokenIssuedAt = parsed.issued_at || 0;
+              return _cachedToken;
+            }
+          }
+        } catch {
+        }
+      }
+      return null;
+    }
+  } catch (e) {
+    console.log("Token fetch error:", e.message);
+    return _cachedToken;
+  }
 }
 __name(getKisToken, "getKisToken");
 async function getBalance(env, _retry = false) {
@@ -266,6 +390,49 @@ async function getBuyingPower(env, _retry = false) {
   return null;
 }
 __name(getBuyingPower, "getBuyingPower");
+async function getDeposit(env, _retry = false) {
+  const token = await getKisToken(env);
+  if (!token) return null;
+  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-present-balance`;
+  const params = new URLSearchParams({
+    CANO: env.KIS_CANO,
+    ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+    WCRC_FRCR_DVSN_CD: "01",
+    NATN_CD: "840",
+    TR_MKET_CD: "00",
+    INQR_DVSN_CD: "00"
+  });
+  const r = await fetch(`${url}?${params}`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      appkey: env.KIS_APP_KEY,
+      appsecret: env.KIS_SECRET_KEY,
+      "tr_id": "VTRP6504R"
+    }
+  });
+  const data = await r.json();
+  if (data.rt_cd === "0") {
+    const currencies = data.output2 || [];
+    for (const c of currencies) {
+      if (c.crcy_cd === "USD" && parseFloat(c.frcr_dncl_amt_2 || "0") > 0) {
+        return { usd_amt: c.frcr_dncl_amt_2 };
+      }
+    }
+    const summary = data.output3 || {};
+    if (summary.frcr_evlu_tota || summary.tot_asst_amt) {
+      return { usd_amt: summary.frcr_evlu_tota || summary.tot_asst_amt || "0" };
+    }
+    return null;
+  }
+  if (!_retry) {
+    _cachedToken = null;
+    _tokenIssuedAt = 0;
+    return getDeposit(env, true);
+  }
+  return null;
+}
+__name(getDeposit, "getDeposit");
 async function sellOrder(env, symbol, qty, price) {
   const token = await getKisToken(env);
   if (!token) return false;
@@ -322,6 +489,51 @@ async function buyOrder(env, symbol, qty, price) {
   return data.rt_cd === "0";
 }
 __name(buyOrder, "buyOrder");
+async function checkOrderFills(env) {
+  const token = await getKisToken(env);
+  if (!token) return null;
+  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-ccnl`;
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, "");
+  const params = new URLSearchParams({
+    CANO: env.KIS_CANO,
+    ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+    PDNO: "",
+    ORD_STRT_DT: today,
+    ORD_END_DT: today,
+    SLL_BUY_DVSN: "00",
+    CCLD_NCCS_DVSN: "00",
+    OVRS_EXCG_CD: "",
+    SORT_SQN: "DS",
+    ORD_DT: "",
+    ORD_GNO_BRNO: "",
+    ODNO: "",
+    CTX_AREA_NK200: "",
+    CTX_AREA_FK200: ""
+  });
+  const r = await fetch(`${url}?${params}`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      appkey: env.KIS_APP_KEY,
+      appsecret: env.KIS_SECRET_KEY,
+      "tr_id": "VTTS3035R"
+    }
+  });
+  const data = await r.json();
+  if (data.rt_cd === "0") {
+    return data.output || [];
+  }
+  return null;
+}
+__name(checkOrderFills, "checkOrderFills");
+async function saveFillCheckToKV(env, orderedSymbols) {
+  if (!env.KV || !orderedSymbols || orderedSymbols.length === 0) return;
+  await env.KV.put("pending_fill_check", JSON.stringify({
+    symbols: orderedSymbols,
+    ordered_at: (/* @__PURE__ */ new Date()).toISOString()
+  }));
+}
+__name(saveFillCheckToKV, "saveFillCheckToKV");
 async function executeApproval(env) {
   try {
     const ts = Date.now();
@@ -364,7 +576,7 @@ async function executeApproval(env) {
       sellMsg += "\u{1F534} *\uB9E4\uB3C4:*\n";
       for (const s of sellStocks) {
         const ok = await sellOrder(env, s.symbol, s.qty, s.current);
-        sellMsg += ok ? `  \u2705 ${s.symbol} ${s.qty}\uC8FC \xD7 $${s.current.toFixed(2)} \uB9E4\uB3C4 \uC644\uB8CC
+        sellMsg += ok ? `  \u2705 ${s.symbol} ${s.qty}\uC8FC \xD7 $${s.current.toFixed(2)} \uB9E4\uB3C4 \uC8FC\uBB38 \uC811\uC218
 ` : `  \u274C ${s.symbol} \uB9E4\uB3C4 \uC2E4\uD328
 `;
       }
@@ -396,7 +608,7 @@ async function executeApproval(env) {
               continue;
             }
             const ok = await buyOrder(env, s.symbol, qty, s.price.toFixed(2));
-            buyMsg += ok ? `  \u2705 ${s.symbol} ${qty}\uC8FC \xD7 $${s.price.toFixed(2)} \uB9E4\uC218 \uC644\uB8CC
+            buyMsg += ok ? `  \u2705 ${s.symbol} ${qty}\uC8FC \xD7 $${s.price.toFixed(2)} \uB9E4\uC218 \uC8FC\uBB38 \uC811\uC218
 ` : `  \u274C ${s.symbol} \uB9E4\uC218 \uC2E4\uD328
 `;
           }
@@ -405,7 +617,11 @@ async function executeApproval(env) {
       }
     }
     msg += buyMsg + sellMsg;
-    return msg;
+    const orderedSymbols = [
+      ...sellStocks.map((s) => s.symbol),
+      ...buyStocks.map((s) => s.symbol)
+    ];
+    return { msg, orderedSymbols };
   } catch (e) {
     return "\u26A0\uFE0F \uC2B9\uC778 \uCC98\uB9AC \uC5D0\uB7EC: " + e.message;
   }
@@ -413,14 +629,17 @@ async function executeApproval(env) {
 __name(executeApproval, "executeApproval");
 async function handleApproval(env) {
   if (isMarketOpen()) {
-    return await executeApproval(env);
+    const result = await executeApproval(env);
+    if (typeof result === "string") return result;
+    await saveFillCheckToKV(env, result.orderedSymbols);
+    return result.msg;
   } else {
     if (env.KV) {
       await env.KV.put("pending_approval", JSON.stringify({
         type: "approval",
         requested_at: (/* @__PURE__ */ new Date()).toISOString()
       }));
-      return '\u2705 *\uC2B9\uC778 \uC608\uC57D \uC644\uB8CC!*\n\n\u{1F552} \uBBF8\uAD6D \uC7A5 \uAC1C\uC7A5(23:30 KST) \uC2DC \uC790\uB3D9 \uB9E4\uC218/\uB9E4\uB3C4\uB97C \uC2E4\uD589\uD569\uB2C8\uB2E4.\n\u{1F4E5} \uACB0\uACFC\uB294 \uD154\uB808\uADF8\uB7A8\uC73C\uB85C \uC54C\uB824\uB4DC\uB9AC\uACA0\uC2B5\uB2C8\uB2E4, \uB300\uD45C\uB2D8.\n\n\uCDE8\uC18C\uD558\uB824\uBA74 "\uC608\uC57D\uCDE8\uC18C" \uB77C\uACE0 \uC785\uB825\uD574 \uC8FC\uC138\uC694.';
+      return '\u2705 *\uC2B9\uC778 \uC608\uC57D \uC644\uB8CC!*\n\n\u{1F552} \uBBF8\uAD6D \uC7A5 \uAC1C\uC7A5(23:30 KST) \uC2DC \uC790\uB3D9 \uB9E4\uC218/\uB9E4\uB3C4\uB97C \uC2E4\uD589\uD569\uB2C8\uB2E4.\n\u{1F4E5} \uC8FC\uBB38 \uC811\uC218 + \uCCB4\uACB0 \uD655\uC778 \uC54C\uB9BC\uC744 \uBCC4\uB3C4\uB85C \uBCF4\uB0B4\uB4DC\uB9AC\uACA0\uC2B5\uB2C8\uB2E4, \uB300\uD45C\uB2D8.\n\n\uCDE8\uC18C\uD558\uB824\uBA74 "\uC608\uC57D\uCDE8\uC18C" \uB77C\uACE0 \uC785\uB825\uD574 \uC8FC\uC138\uC694.';
     } else {
       return "\u26A0\uFE0F KV \uC800\uC7A5\uC18C\uAC00 \uC5F0\uACB0\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.";
     }
@@ -660,7 +879,7 @@ __name(executeEmergencySell, "executeEmergencySell");
 async function handleAiChat(env, question) {
   try {
     if (!env.GEMINI_API_KEY) return "\u26A0\uFE0F AI \uC5D4\uC9C4\uC774 \uC5F0\uACB0\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.";
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
     let ctx = "";
     try {
       const holdings = await getBalance(env);

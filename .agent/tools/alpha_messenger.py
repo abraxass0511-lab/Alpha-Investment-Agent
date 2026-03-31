@@ -14,8 +14,13 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
+# ★ Gemini 실패 추적용 글로벌 카운터
+_gemini_fail_count = 0
+
+
 def _gemini_stock_analysis(symbol, name, data_dict):
     """Gemini Flash로 종목별 매수 근거 1~2문장 생성 (읽기 전용, 숫자 조작 불가)"""
+    global _gemini_fail_count
     if not GEMINI_API_KEY:
         return ""
     try:
@@ -31,7 +36,7 @@ def _gemini_stock_analysis(symbol, name, data_dict):
 - 한국어 1~2문장으로만 답변하세요
 - 이모지 1개만 앞에 붙이세요"""
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.3, "maxOutputTokens": 100},
@@ -49,9 +54,8 @@ def _gemini_stock_analysis(symbol, name, data_dict):
                 print(f"    ⚠️ Gemini 429 (상세 파싱 실패)")
             
             # 2초 대기 후 flash-lite로 재시도
-            import time
             time.sleep(2)
-            fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={GEMINI_API_KEY}"
+            fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={GEMINI_API_KEY}"
             try:
                 r2 = requests.post(fallback_url, json=payload, timeout=10)
                 if r2.status_code == 200:
@@ -62,11 +66,14 @@ def _gemini_stock_analysis(symbol, name, data_dict):
                     print(f"    ❌ flash-lite도 실패: HTTP {r2.status_code}")
             except Exception as e2:
                 print(f"    ❌ flash-lite 폴백 에러: {e2}")
+            _gemini_fail_count += 1
             return ""
         else:
             print(f"    ⚠️ Gemini HTTP {r.status_code}: {r.text[:200]}")
+            _gemini_fail_count += 1
     except Exception as e:
         print(f"    ⚠️ Gemini 분석 에러 ({symbol}): {e}")
+        _gemini_fail_count += 1
     return ""
 
 def send_telegram_message(text):
@@ -321,6 +328,36 @@ def report_daily_picks():
     summary_table += f"| 5단계 | 심리 | {s5}건 | ML점수≥0.7 & SMA₅≥0.6 | MarketAux |\n"
     summary_table += f"| 6단계 | Elite 5 | {s6}건 | 12-1 모멘텀 Top5 | Finnhub |\n\n"
 
+    # ── API 장애 경고 섹션 (5단계/6단계 쿼터 부족 등) ──
+    api_warnings = []
+    s5_quota = meta.get('step5_quota_fail', 0)
+    s5_api_err = meta.get('step5_api_error', 0)
+    s5_analyzed = meta.get('step5_analyzed', 0)
+    s5_target = meta.get('step5_total_target', 0)
+    s6_api_fail = meta.get('step6_api_fail', 0)
+
+    if s5_quota > 0:
+        api_warnings.append(f"🚨 *5단계 MarketAux 쿼터 부족*: {s5_quota}/{s5_target}종목 분석 불가 (429/402)")
+    if s5_api_err > 0:
+        api_warnings.append(f"⚠️ *5단계 MarketAux API 오류*: {s5_api_err}종목 데이터 수집 실패")
+    if s5_target > 0 and s5_analyzed == 0 and (s5_quota > 0 or s5_api_err > 0):
+        api_warnings.append(f"❌ *5단계 전면 중단*: 대상 {s5_target}종목 중 0종목 분석 완료 (API 장애)")
+    if s6_api_fail > 0:
+        api_warnings.append(f"⚠️ *6단계 모멘텀 API 실패*: {s6_api_fail}종목 데이터 수집 불가 (Finnhub+Yahoo)")
+
+    # ★ Gemini AI 코멘트 실패도 추적 (보고서 생성 후 카운터 확인)
+    # (Gemini 실패 카운터는 보고서 조립 후 체크 — 아래 footer 직전에서 처리)
+
+    api_warning_section = ""
+    if api_warnings:
+        api_warning_section = "\n🚨 *[API 장애 경고]*\n"
+        api_warning_section += "─────────────────\n"
+        for w in api_warnings:
+            api_warning_section += f"{w}\n"
+        api_warning_section += "\n💡 _쿼터 부족으로 분석이 불완전할 수 있습니다. 결과를 참고용으로만 활용해 주세요._\n\n"
+    
+    summary_table += api_warning_section
+
     analysis_section = "*🧠 심층 분석 결과 (최종 승인 대기)*\n"
     buy_stocks = []
     
@@ -366,6 +403,7 @@ def report_daily_picks():
                 if ai_comment:
                     picks_content += f"   🧠 _{ai_comment}_\n"
                 picks_content += "\n"
+                time.sleep(10)  # Gemini RPM 한도 방지 (분당 10건 → 10초 간격)
             analysis_section += picks_content
     else:
         analysis_section += "❌ *조건 부합 종목 없음*\n\n"
@@ -414,6 +452,7 @@ def report_daily_picks():
                     if ai_comment:
                         rebalance_section += f"     🧠 _{ai_comment}_\n"
                     rebalance_section += "\n"
+                    time.sleep(10)  # Gemini RPM 한도 방지
 
     except Exception as e:
         print(f"⚠️ 리밸런싱 데이터 로드 에러: {e}")
@@ -438,9 +477,38 @@ def report_daily_picks():
     else:
         final_result = "*🎯 최종 결과*\n*🛡️ 가디언 조치*: 정밀 필터링(0.7) 기준 미달. **전액 현금 보유 권고.**\n\n"
 
+    # ── Gemini AI 코멘트 실패 체크 (보고서 생성 후 카운터 확인) ──
+    gemini_fails = _gemini_fail_count
+    if gemini_fails > 0:
+        api_warnings.append(f"⚠️ *Gemini AI 코멘트 쿼터 부족*: {gemini_fails}종목 AI 분석 생략 (429)")
+        # 경고 섹션 재생성 (Gemini 포함)
+        api_warning_section = "\n🚨 *[API 장애 경고]*\n"
+        api_warning_section += "─────────────────\n"
+        for w in api_warnings:
+            api_warning_section += f"{w}\n"
+        api_warning_section += "\n💡 _쿼터 부족으로 분석이 불완전할 수 있습니다._\n\n"
+        # summary_table 끝의 기존 경고 교체
+        if "API 장애 경고" in summary_table:
+            cut_idx = summary_table.index("\n🚨 *[API")
+            summary_table = summary_table[:cut_idx] + api_warning_section
+        else:
+            summary_table += api_warning_section
+
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
-    if meta.get("success_all", False):
+    has_api_issues = (s5_quota > 0 or s5_api_err > 0 or s6_api_fail > 0 or gemini_fails > 0)
+    if meta.get("success_all", False) and not has_api_issues:
         footer = "📝 _비고 : Finnhub+MarketAux에서 모든 정보 수집 완료_"
+    elif meta.get("success_all", False) and has_api_issues:
+        issue_parts = []
+        if s5_quota > 0:
+            issue_parts.append(f"MarketAux 쿼터 부족({s5_quota}건)")
+        if s5_api_err > 0:
+            issue_parts.append(f"MarketAux API 오류({s5_api_err}건)")
+        if s6_api_fail > 0:
+            issue_parts.append(f"6단계 모멘텀 API 실패({s6_api_fail}건)")
+        if gemini_fails > 0:
+            issue_parts.append(f"Gemini AI 쿼터 부족({gemini_fails}건)")
+        footer = f"📝 _비고 : ⚠️ 1~4단계 정상 수집, 단 {' / '.join(issue_parts)}_"
     else:
         footer = "📝 _비고 : ⚠️ 데이터 일부 누락 발생 (수집 미완료)_"
 

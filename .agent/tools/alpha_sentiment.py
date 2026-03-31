@@ -5,7 +5,7 @@
 1. 데이터 필터링: MarketAux match_score ≥ 0.8 (주인공 뉴스만)
 2. 비대칭 임계값: 신규 ≥ 0.7 (BUY) / 보유 ≥ 0.5 (Hold) / < 0.5 (Exit)
 3. 변동성 제어: 심리 5일선(SMA₅) — 당일 0.7+ AND SMA₅ 0.6+ 이중 게이트
-4. No News Rule: 신규=매수금지 / 보유=유지(Hold)
+4. No News Rule: 뉴스 0건 = 중립(0.5) → 신규 BUY 차단, 보유 HOLD 유지
 
 데이터 무결성 원칙:
 - Symbol, Price, ROE 등 모든 숫자는 CSV 원본(row)에서만 추출
@@ -123,10 +123,16 @@ def fetch_marketaux_sentiment(symbol):
     """
     ★ MarketAux API: 종목별 뉴스 + ML 심리점수 수집 ★
     필터: match_score ≥ 0.8 (주인공 뉴스만)
+    
+    Returns:
+        dict: 정상 응답 ({"scores": [...], ...})
+        "QUOTA_EXCEEDED": 쿼터 부족 (429/402)
+        "API_ERROR": 기타 API 오류
+        None: API 키 없음 등 설정 오류
     """
     if not MARKETAUX_KEY:
         print(f"    ❌ MARKETAUX_API_KEY 없음")
-        return None
+        return "API_ERROR"
 
     url = "https://api.marketaux.com/v1/news/all"
     params = {
@@ -144,13 +150,13 @@ def fetch_marketaux_sentiment(symbol):
 
         if r.status_code == 429:
             print(f"    ⚠️ MarketAux 쿼터 초과 (429) — {symbol}")
-            return None
+            return "QUOTA_EXCEEDED"
         if r.status_code == 402:
             print(f"    ⚠️ MarketAux 플랜 제한 (402) — {symbol}")
-            return None
+            return "QUOTA_EXCEEDED"
         if r.status_code != 200:
             print(f"    ⚠️ MarketAux HTTP {r.status_code} — {symbol}")
-            return None
+            return "API_ERROR"
 
         data = r.json()
         articles = data.get("data", [])
@@ -186,7 +192,7 @@ def fetch_marketaux_sentiment(symbol):
 
     except Exception as e:
         print(f"    ⚠️ MarketAux 에러({e}) — {symbol}")
-        return None
+        return "API_ERROR"
 
 
 # ═══════════════════════════════════════════════════════
@@ -199,7 +205,7 @@ def analyze_ticker_marketaux(row, history, today_str):
     규칙1: 관련도 ≥ 0.8 필터 (주인공 뉴스만)
     규칙2: 신규 매수 ≥ 0.7 / 보유 ≥ 0.5
     규칙3: SMA₅ ≥ 0.6 이중 게이트
-    규칙4: No News = 신규 매수 금지
+    규칙4: No News = 중립(0.5) → 신규 BUY 차단, 보유 HOLD 유지
     """
     symbol = row.get('Symbol')
     name = row.get('Name')
@@ -210,35 +216,41 @@ def analyze_ticker_marketaux(row, history, today_str):
     # 1. MarketAux에서 ML 심리점수 수집
     result = fetch_marketaux_sentiment(symbol)
 
-    if result is None:
-        # API 장애 → 안전 모드: 매수 금지 (No News Rule 적용)
-        print(f"    📭 {symbol} MarketAux API 장애 → 매수 금지 (안전 모드)")
-        return None
+    if result == "QUOTA_EXCEEDED":
+        print(f"    📭 {symbol} MarketAux 쿼터 부족 → 분석 불가")
+        return "QUOTA_EXCEEDED"
+    if result == "API_ERROR" or result is None:
+        print(f"    📭 {symbol} MarketAux API 장애 → 분석 불가")
+        return "API_ERROR"
 
     scores = result["scores"]
     total = result["articles_total"]
     relevant = result["articles_relevant"]
     sources = result["sources"]
 
-    # ★ 규칙4: No News Rule ★
+    # ★ 규칙4: No News Rule (중립 간주) ★
     if not scores:
-        # 관련도 0.8+ 뉴스 0건 → 신규 매수 금지 (검증 불가)
-        print(f"    📭 {symbol} 관련 뉴스 0건 (전체 {total}건) → 신규 매수 금지 (No News Rule)")
-        # 히스토리에는 기록하지 않음 (데이터 없는 날은 SMA에서 제외)
+        # 관련도 0.8+ 뉴스 0건 → 중립(0.5) 간주
+        # "뉴스 없음 = 악재도 없음" → 0.5 < 0.7이므로 신규 BUY 차단, 보유 HOLD 유지
+        no_news_score = 0.50
+        update_history(history, symbol, no_news_score, today_str)  # SMA₅ 축적용 기록
+        sma5 = calculate_sma5(history, symbol)
+        sma5_label = f"{sma5:.3f}" if sma5 is not None else "N/A (축적 중)"
+        print(f"    📭 {symbol} 관련 뉴스 0건 (전체 {total}건) → 중립(0.5) 간주 [HOLD (관망)]")
         return {
             "Symbol": symbol,
             "Name": name,
             "Price": price,
             "Momentum(%)": momentum,
-            "Sentiment": 0.50,  # 중립으로 기록 (보유 종목이면 Hold 가능)
-            "SMA5": calculate_sma5(history, symbol),
+            "Sentiment": no_news_score,
+            "SMA5": sma5,
             "ROE(%)": roe,
             "MarketCap_M": row.get('MarketCap_M', 0),
             "MA50": row.get('MA50', 0),
             "Surprise(%)": row.get('Surprise(%)', 0),
             "EPS_Growth(%)": row.get('EPS_Growth(%)', 0),
-            "Status": "HOLD (뉴스 없음 — 신규 매수 금지)",
-            "Reason": f"📭 No News Rule — 관련 뉴스 0건 (전체 {total}건, 관련도≥{RELEVANCE_THRESHOLD})",
+            "Status": "HOLD (관망/대기)",
+            "Reason": f"📭 뉴스 0건 → 중립(0.5) 간주 (전체 {total}건, 관련도≥{RELEVANCE_THRESHOLD})",
         }
 
     # 2. ★ 정량 점수 계산: 관련도 0.8+ 기사들의 평균 sentiment ★
@@ -302,7 +314,10 @@ def analyze_ticker_marketaux(row, history, today_str):
 # 6단계: 12-1 모멘텀
 # ═══════════════════════════════════════════════════════
 def calculate_12_1_momentum(symbol):
-    """Step 6: 12-1 Month Momentum (Finnhub Primary → Yahoo Fallback)"""
+    """
+    Step 6: 12-1 Month Momentum (Finnhub Primary → Yahoo Fallback)
+    Returns: float (성공 시) 또는 None (API 실패 시)
+    """
     # 1차: Finnhub Candle API (Primary)
     FKEY = os.getenv("FINNHUB_API_KEY")
     if FKEY:
@@ -337,7 +352,9 @@ def calculate_12_1_momentum(symbol):
     except Exception as e:
         print(f"    ⚠️ Yahoo 6단계 폴백 에러({e}) ({symbol})")
 
-    return 0.0
+    # ★ Finnhub + Yahoo 둘 다 실패 → None 반환 (API 장애와 모멘텀 0 구분)
+    print(f"    🚨 {symbol} 12-1 모멘텀 데이터 수집 실패 (Finnhub+Yahoo)")
+    return None
 
 
 # ═══════════════════════════════════════════════════════
@@ -375,17 +392,33 @@ def run_sentiment_v3():
     print(f"   🔑 API Key: {'있음' if MARKETAUX_KEY else '❌ 없음'}")
 
     sentiment_all = []
+    quota_fail_count = 0    # ★ 쿼터 부족 카운터
+    api_error_count = 0     # ★ API 오류 카운터
+    analyzed_count = 0      # ★ 정상 분석 카운터
+
     # MarketAux Rate Limit: 무료 100콜/일 → 직렬 처리 (안전)
     for idx, row in df.iterrows():
         try:
             res = analyze_ticker_marketaux(row, history, today_str)
-            if res:
+            if res == "QUOTA_EXCEEDED":
+                quota_fail_count += 1
+            elif res == "API_ERROR":
+                api_error_count += 1
+            elif res:
                 sentiment_all.append(res)
+                analyzed_count += 1
         except Exception as e:
+            api_error_count += 1
             print(f"    ❌ {row.get('Symbol', '?')} 분석 에러: {e}")
 
         # MarketAux Rate Limit 방지: 종목간 0.5초 대기
         time.sleep(0.5)
+
+    # ★ 쿼터 부족 요약 로그
+    if quota_fail_count > 0:
+        print(f"   🚨 MarketAux 쿼터 부족: {quota_fail_count}종목 분석 불가!")
+    if api_error_count > 0:
+        print(f"   ⚠️ MarketAux API 오류: {api_error_count}종목")
 
     # 히스토리 저장 (다음날 SMA₅ 계산용)
     save_sentiment_history(history)
@@ -409,14 +442,27 @@ def run_sentiment_v3():
 
     meta["step5"] = buy_count
 
+    # ★ 5단계 API 장애 정보를 metadata에 기록 ★
+    meta["step5_quota_fail"] = quota_fail_count
+    meta["step5_api_error"] = api_error_count
+    meta["step5_analyzed"] = analyzed_count
+    meta["step5_total_target"] = len(df)
+
     # [Step 6] 12-1 Momentum Sorting (Elite 5 Selection)
     final_picks = []
+    step6_api_fail = 0  # ★ 6단계 API 실패 카운터
+
     if buy_count > 0:
         print(f"⚖️ [Step 6] 12-1 모멘텀 소팅 중... (대상: {buy_count}개 종목)")
         for item in buy_candidates:
             mom = calculate_12_1_momentum(item['Symbol'])
+            if mom is None:
+                step6_api_fail += 1
+                mom = 0.0  # API 실패 시 0으로 처리 (탈락 대상이지만 원인은 기록)
+                item['Reason'] += f" | ⚠️ 12-1 모멘텀: API 실패"
+            else:
+                item['Reason'] += f" | 12-1 모멘텀: {round(mom*100, 2)}%"
             item['Momentum_12_1'] = mom
-            item['Reason'] += f" | 12-1 모멘텀: {round(mom*100, 2)}%"
 
         positive_mom = [x for x in buy_candidates if x['Momentum_12_1'] > 0]
         negative_mom = [x for x in buy_candidates if x['Momentum_12_1'] <= 0]
@@ -434,6 +480,9 @@ def run_sentiment_v3():
             print(f"    ℹ️ 양수 모멘텀 {len(positive_mom)}개 → Top {len(final_picks)} 선정 (빈 슬롯 = 현금 보유)")
     else:
         meta["step6"] = 0
+
+    # ★ 6단계 API 장애 정보를 metadata에 기록 ★
+    meta["step6_api_fail"] = step6_api_fail
 
     with open("output_reports/metadata.json", "w") as f:
         json.dump(meta, f)

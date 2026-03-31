@@ -514,6 +514,15 @@ def run_scan():
     sp500 = get_sp500_tickers()
     if not sp500:
         print("❌ S&P 500 목록 수집 실패")
+        # 실패 원인을 metadata에 기록 (알림에서 원인 표시용)
+        os.makedirs("output_reports", exist_ok=True)
+        with open("output_reports/metadata.json", "w") as f:
+            json.dump({
+                "success_all": False,
+                "fail_reason": "wikipedia_fetch_failed",
+                "fail_detail": "S&P 500 목록 수집 실패 (Wikipedia 접속 불가)",
+                "timestamp": datetime.now().isoformat(),
+            }, f)
         return
 
     total = len(sp500)

@@ -33,12 +33,38 @@ def notify_failure():
         print("✅ 스캔 성공 — 실패 알림 불필요")
         return
 
+    # 구체적 실패 원인
+    fail_reason = meta.get("fail_reason", "")
+    fail_detail = meta.get("fail_detail", "")
+    s5_quota = meta.get("step5_quota_fail", 0)
+    s5_api_err = meta.get("step5_api_error", 0)
+    s6_api_fail = meta.get("step6_api_fail", 0)
+
+    # 원인별 메시지 구성
+    reason_line = ""
+    if fail_reason == "wikipedia_fetch_failed":
+        reason_line = "\n🚨 *원인: Wikipedia S&P 500 목록 수집 실패*\n"
+    elif fail_detail:
+        reason_line = f"\n🚨 *원인: {fail_detail}*\n"
+
+    api_issue_lines = ""
+    if s5_quota > 0 or s5_api_err > 0 or s6_api_fail > 0:
+        api_issue_lines = "\n*API 장애 상세:*\n"
+        if s5_quota > 0:
+            api_issue_lines += f"  🚨 5단계 MarketAux 쿼터 부족: {s5_quota}종목\n"
+        if s5_api_err > 0:
+            api_issue_lines += f"  ⚠️ 5단계 MarketAux API 오류: {s5_api_err}종목\n"
+        if s6_api_fail > 0:
+            api_issue_lines += f"  ⚠️ 6단계 모멘텀 API 실패: {s6_api_fail}종목\n"
+
     msg = (
         "⚠️ *스캔 실패 알림*\n\n"
+        f"{reason_line}"
         f"*단계별 결과:*\n"
         f"  1+2단계(체급+내실): {step12}건 / {total}종목\n"
         f"  3단계(에너지): {step3}건\n"
-        f"  4단계(성장): {step4}건\n\n"
+        f"  4단계(성장): {step4}건\n"
+        f"{api_issue_lines}\n"
         f"📡 Finnhub: {finnhub_calls}콜\n"
         f"⏱️ 소요: {elapsed}분\n"
         f"🔧 엔진: {engine}\n\n"

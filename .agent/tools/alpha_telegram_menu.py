@@ -52,16 +52,37 @@ def answer_callback(callback_query_id, text=""):
         pass
 
 
+def ensure_no_webhook():
+    """Webhook이 설정되어 있으면 제거 (getUpdates와 충돌 방지)"""
+    try:
+        r = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo", timeout=5)
+        wh = r.json().get("result", {})
+        wh_url = wh.get("url", "")
+        if wh_url:
+            print(f"⚠️ Webhook 감지: {wh_url}")
+            print("   → Webhook 제거 중... (getUpdates와 동시 사용 불가)")
+            requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook", timeout=5)
+            print("   ✅ Webhook 제거 완료")
+        else:
+            print("✅ Webhook 없음 — getUpdates 정상 사용")
+    except Exception as e:
+        print(f"⚠️ Webhook 확인 에러: {e}")
+
+
 def get_updates():
     """Telegram getUpdates — offset 없이 최근 100건 조회 (시간 필터로 중복 방지)"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
     params = {"timeout": 5, "allowed_updates": ["message", "callback_query"], "limit": 100}
     try:
         r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+        print(f"📡 getUpdates 응답: ok={data.get('ok')} | result 개수={len(data.get('result', []))}")
+        if not data.get('ok'):
+            print(f"   ❌ 에러: {data.get('description', 'unknown')}")
         if r.status_code == 200:
-            return r.json().get("result", [])
-    except:
-        pass
+            return data.get("result", [])
+    except Exception as e:
+        print(f"❌ getUpdates 에러: {e}")
     return []
 
 
@@ -754,6 +775,9 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"🤖 알파 텔레그램 메뉴 봇 ({datetime.now().strftime('%H:%M')})")
     print("=" * 50)
+    
+    # Webhook 충돌 확인 및 제거
+    ensure_no_webhook()
     
     # 예약 매수 확인 (장 개장 시 자동 집행)
     check_pending_approval()

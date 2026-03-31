@@ -5,63 +5,49 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 
 # 🤖 Agent Alpha: The Precision Investment Executive
 
-에이전트 알파는 **S&P 500 전 종목**을 대상으로 **$10B 이상의 체급**, **15% 이상의 ROE**, **상승 모멘텀**, 그리고 **성장 가속도(Growth)**를 가진 기업 중 **MarketAux ML 심리 점수 0.7점 이상 & SMA₅ 0.6 이상**을 달성하고 **12-1 모멘텀 상위 5개**만을 최종 매수하는 초정예 자율 투자 에이전트입니다.
+에이전트 알파는 **S&P 500 전 종목**을 대상으로 **$10B 이상의 체급**, **15% 이상의 ROE**, **상승 에너지**, **성장 가속도(Growth)**를 가진 기업 중 **12-1 모멘텀 상위 5개**만을 최종 매수하는 초정예 자율 투자 에이전트입니다.
 
-## 🛡️ 에이전트 알파의 6단계 필터링 (The Final Filter)
+## 🛡️ 에이전트 알파의 5단계 필터링 (The Final Filter)
 
 | 단계 | 미션 (Mission) | 상세 통과 기준 (Pass Criteria) | 데이터 소스 (Source) |
 | :--- | :--- | :--- | :--- |
-| **1단계** | **체급 (Size)** | **시가총액 $10B 이상** | Finnhub (marketCap) |
-| **2단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | Finnhub (priceAvg50) |
-| **3단계** | **내실 (Quality)** | **ROE 15% 이상** | Finnhub + 개별 검증 |
-| **4단계** | **성장 (Growth)** | **Surprise > 10% OR Growth > 20%** | Finnhub API |
-| **5단계** | **심리 (Sentiment)** | **ML점수 ≥ 0.7 AND SMA₅ ≥ 0.6** | MarketAux ML |
-| **6단계** | **기세 (Elite 5)** | **12-1개월 모멘텀 상위 5개** | Finnhub Candle |
-
-## 📊 5단계 심리 분석 — 4대 규칙
-
-### 규칙 1: 데이터 필터링 — "주인공만 모셔라"
-*   MarketAux API에서 종목별 뉴스 수집
-*   **match_score ≥ 0.8** 인 기사만 채택 (관련도 필터)
-*   종목이 기사의 '주인공'인 뉴스만 점수에 반영 (잡음 90% 제거)
-
-### 규칙 2: 비대칭 임계값 — "입구는 좁게, 출구는 넓게"
-
-| 상황 | 심리 점수 | 액션 | 이유 |
-| :--- | :--- | :--- | :--- |
-| **신규 매수** | ≥ 0.7 | 진입 허가 | 확실한 호재가 있을 때만 지갑을 염 |
-| **기존 보유** | ≥ 0.5 | 보유(Hold) | 악재 없으면 엉덩이 무겁게 수익 추구 |
-| **위기 감지** | < 0.5 | 매도/관망 | 분위기가 꺾이면 탈출하여 자산 보호 |
-
-### 규칙 3: 변동성 제어 — "심리 5일선(SMA₅)"
-*   매일 심리 점수를 `sentiment_history.json`에 누적 저장
-*   **SMA₅ = (오늘 + t-1 + t-2 + t-3 + t-4) / 5**
-*   **이중 게이트**: 당일 점수가 0.7을 넘더라도, SMA₅가 0.6 미만이면 매수 차단
-*   **콜드 스타트**: 3일 미만 히스토리 시 당일 점수만으로 판정
-
-### 규칙 4: 예외 상황 — "No News Rule"
-*   **신규 매수**: 관련 뉴스 0건 → **매수 금지** (검증 불가 — 안전제일)
-*   **기존 보유**: 관련 뉴스 0건 → **보유 유지** (무소식=희소식)
+| **1+2단계** | **체급+내실 (Size+Quality)** | **시가총액 $10B 이상, ROE 15% 이상** | Finnhub |
+| **3단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | Finnhub |
+| **4단계** | **성장 (Growth)** | **Surprise > 10%** | Finnhub API |
+| **5단계** | **모멘텀 Elite 5** | **12-1개월 모멘텀 양수 + 상위 5개** | Finnhub Candle |
 
 ## ⚙️ Operational Strategy
 
 ### **데이터 무결성 (Data Integrity)**
-*   **Finnhub 전용 엔진**: 1~4단계 데이터 수집은 Finnhub으로 처리합니다.
+*   **Finnhub 전용 엔진**: 전 단계 데이터 수집은 Finnhub으로 처리합니다.
+*   **Yahoo Finance 폴백**: 모멘텀 계산 시 Finnhub 실패 시 Yahoo Finance로 자동 전환합니다.
 *   **배치 누락 복구**: 배치 응답에서 누락된 종목은 **2회 개별 재시도** 후에만 탈락 처리합니다.
-*   **MarketAux ML 심리 분석**: AI 주관 판단 대신 **MarketAux의 ML 사전계산 sentiment_score**를 사용합니다. `match_score ≥ 0.8`인 고관련도 기사만 필터링하여 **결정적(Deterministic) 점수**를 산출합니다.
-*   **SMA₅ 히스토리**: `sentiment_history.json`에 날짜별 점수를 누적하여 5일 이동평균을 계산합니다.
 
 ### **자동 리포팅 & 스케줄링**
 *   **이중 트리거 체계**: Google Apps Script(주 트리거)가 매일 오전 6시(KST) 미국장 마감 직후 정시에 워크플로우를 실행합니다. GitHub Actions cron은 백업으로 유지됩니다.
-*   **보고서 표준**: 100% 성공 시에만 전송하며 하단에 **"비고 : Finnhub+MarketAux에서 모든 정보 받음"**을 명시합니다.
+*   **보고서 표준**: 100% 성공 시에만 전송하며 하단에 **"비고 : Finnhub에서 모든 정보 수집 완료"**를 명시합니다.
+*   **Gemini AI 코멘트**: 최종 선정 종목에 대해 Gemini 2.5 Flash(thinkingBudget=0)로 1~2문장 매수 근거를 생성합니다.
+*   **참고 지표**: CNN Fear & Greed Index를 보고서 하단에 자동 표시합니다.
 
 ### **매매 집행 원칙 (Execution Policy)**
 *   **매수 (Buy)**: 오전 리포트 보고 후 대표님 **"승인"** 메시지 수신 시에만 매수 큐(Queue)에 등록 후 장 개장 시 자동 매수 시도.
-*   **매도 (Sell)**: 손절선(-7%) 또는 트레일링 스탑(-10%) 도달 시 **대표님께 묻지 않고 즉각 자동 매도** 후 즉각 알림 전송.
+*   **매도 (Sell)**: 1~4단계 탈락 종목은 리밸런싱 매도 추천. 트레일링 스탑(-10%) 도달 시 **대표님께 묻지 않고 즉각 자동 매도** 후 즉각 알림 전송.
+*   **순서**: 매도 먼저 실행(현금 확보) → 이후 매수 실행.
 
 ## ⚙️ Project Ecosystem
-*   **Tools Directory**: `.agent/tools/` (alpha_scanner.py, alpha_sentiment.py, alpha_messenger.py, etc.)
-*   **Output Directory**: `output_reports/` (daily_scan_latest.csv, final_picks_latest.csv, sentiment_history.json, metadata.json)
+*   **Tools Directory**: `.agent/tools/`
+    * `alpha_scanner.py` — 1~4단계 스캐너
+    * `alpha_sentiment.py` — 5단계 모멘텀 셀렉터
+    * `alpha_messenger.py` — 보고서 생성 + 텔레그램 발송
+    * `alpha_rebalancer.py` — 보유종목 재검증
+    * `alpha_executor.py` — 매수/매도 집행
+    * `alpha_trader.py` — KIS API 래퍼
+    * `alpha_telegram_menu.py` — 텔레그램 메뉴 봇
+    * `alpha_guardian.py` — 트레일링 스탑 감시
+    * `alpha_ai_chat.py` — AI 대화 엔진
+    * `us_market_calendar.py` — 미국 휴장일 캘린더
+*   **Output Directory**: `output_reports/` (daily_scan_latest.csv, final_picks_latest.csv, metadata.json)
+*   **Cloudflare Worker**: `cloudflare-worker/worker.js` (포트폴리오 API 프록시)
 
 ---
 
@@ -97,3 +83,4 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 
 ---
 "대표님이 잠든 사이에도, 알파는 차가운 원칙으로 시장을 뚫어지게 감시합니다." 🚀🛡️
+

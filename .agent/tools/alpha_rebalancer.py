@@ -231,24 +231,36 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
             if roe < 15:
                 reasons.append(f"3단계(내실) 탈락: ROE {roe:.1f}% < 15%")
 
-            # ★ 1~4단계 통과 수치 요약 (5~6단계 탈락 시 맥락 제공용)
-            stage14_summary = (
-                f"[1~4단계 통과] 시총 ${market_cap_m/1000:.1f}B, "
+            # ★ 센티먼트 & 모멘텀 수치 추출 (5~6단계)
+            sent_score = 0.5
+            sma5_str = "축적 중"
+            momentum_pct = 0
+            if sym in sentiment_data:
+                sent_row = sentiment_data[sym]
+                sent_score = float(sent_row.get("Sentiment", "0.5") or "0.5")
+                sma5_raw = sent_row.get("SMA5", "")
+                sma5_str = sma5_raw if sma5_raw else "축적 중"
+                try:
+                    momentum_pct = float(sent_row.get("Momentum(%)", "0") or "0")
+                except (ValueError, TypeError):
+                    momentum_pct = 0
+
+            # ★ 1~6단계 전체 수치 요약 (탈락 시 맥락 제공용)
+            stage_full_summary = (
+                f"[전체 수치] 시총 ${market_cap_m/1000:.1f}B, "
                 f"ROE {roe:.1f}%, "
-                f"종가 ${price:.2f} > 50MA ${ma50:.2f}, "
-                f"Surprise {surprise:.1f}% / Growth {eps_growth:.1f}%"
+                f"종가 ${price:.2f} vs 50MA ${ma50:.2f}, "
+                f"Surprise {surprise:.1f}%/Growth {eps_growth:.1f}%, "
+                f"센티먼트 {sent_score:.3f} (SMA₅: {sma5_str}), "
+                f"모멘텀 {momentum_pct:.1f}%"
             )
 
             # ★ 5단계(심리) 보유종목 기준: ≥ 0.5 유지 (비대칭 임계값)
             if sym in sentiment_data:
-                sent_row = sentiment_data[sym]
-                sent_score = float(sent_row.get("Sentiment", "0"))
-                sma5_raw = sent_row.get("SMA5", "")
-                sma5_str = sma5_raw if sma5_raw else "축적 중"
                 if sent_score < 0.5:
                     reasons.append(
                         f"5단계(심리) 탈락: 센티먼트 {sent_score:.3f} < 0.5 "
-                        f"(SMA₅: {sma5_str}) — {stage14_summary}"
+                        f"(SMA₅: {sma5_str}) — {stage_full_summary}"
                     )
             else:
                 # ★ No News Rule: 보유 종목 뉴스 없음 → "무소식이 희소식" → 유지(Hold)

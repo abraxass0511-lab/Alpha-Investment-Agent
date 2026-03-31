@@ -1,40 +1,18 @@
-name: Alpha Telegram Menu Bot
+name: Alpha Telegram Menu Bot (DISABLED - Using Cloudflare Worker Webhook)
+
+# ⚡ 텔레그램 메시지 처리는 Cloudflare Worker Webhook이 실시간으로 담당
+# 이 워크플로우는 비활성화됨 (getUpdates 폴링 → Worker Webhook으로 전환)
+# Worker와 getUpdates가 동시에 돌면 충돌하므로, 반드시 하나만 사용
 
 on:
-  schedule:
-    # 한국 시간 09:00~23:00 (UTC 00:00~14:00), 월~금, 5분 간격
-    - cron: '*/5 0-14 * * 1-5'
-  workflow_dispatch:
+  workflow_dispatch:  # 수동 테스트용으로만 유지
 
 jobs:
-  check-menu:
+  disabled-notice:
     runs-on: ubuntu-latest
-
-    env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
-      KIS_SECRET_KEY: ${{ secrets.KIS_SECRET_KEY }}
-      KIS_CANO: ${{ secrets.KIS_CANO }}
-      KIS_ACNT_PRDT_CD: ${{ secrets.KIS_ACNT_PRDT_CD }}
-      KIS_BASE_URL: ${{ secrets.KIS_BASE_URL }}
-      WORKER_URL: ${{ secrets.WORKER_URL }}
-      WORKER_API_KEY: ${{ secrets.WORKER_API_KEY }}
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-
-    - name: Install dependencies
+    - name: Notice
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Process Telegram Menu
-      run: python .agent/tools/alpha_telegram_menu.py
+        echo "⚡ 텔레그램 메뉴는 Cloudflare Worker Webhook이 실시간으로 처리합니다."
+        echo "📡 Worker URL에 Telegram Webhook이 등록되어 있습니다."
+        echo "🚫 이 워크플로우의 getUpdates 폴링은 비활성화되었습니다."

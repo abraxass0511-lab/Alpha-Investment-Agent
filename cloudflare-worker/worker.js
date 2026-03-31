@@ -864,22 +864,22 @@ async function handleBalance(env) {
 
 async function handleTodayScan(env) {
   try {
-    const url = "https://raw.githubusercontent.com/abraxass0511-lab/Alpha-Investment-Agent/main/output_reports/metadata.json";
+    const ts = Date.now();
+    const url = `https://raw.githubusercontent.com/abraxass0511-lab/Alpha-Investment-Agent/main/output_reports/metadata.json?t=${ts}`;
     const r = await fetch(url);
     if (!r.ok) return "\ud83d\udd0d *\uc624\ub298\uc790 \uc2a4\uce94*\n\n\u274c \uc544\uc9c1 \uc624\ub298 \uc2a4\uce94\uc774 \uc2e4\ud589\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.";
     
     const meta = await r.json();
     const scanTime = (meta.timestamp || "N/A").substring(0, 16);
-    const step6 = meta.step6 || 0;
+    const step5 = meta.step5 || 0;
 
     let msg = "\ud83d\udd0d *\uc624\ub298\uc790 \uc2a4\uce94 \uacb0\uacfc*\n\n\ud83d\udcc5 \uc2a4\uce94 \uc2dc\uac01: " + scanTime + "\n\n";
     msg += "`1+2\ub2e8\uacc4` \uccb4\uae09+\ub0b4\uc2e4 : " + (meta.total || 503) + " \u2192 *" + (meta.step12 || meta.step1 || 0) + "\uac74*\n";
     msg += "`3\ub2e8\uacc4` \uc5d0\ub108\uc9c0 : \u2192 *" + (meta.step3 || 0) + "\uac74*\n";
     msg += "`4\ub2e8\uacc4` \uc131\uc7a5   : \u2192 *" + (meta.step4 || 0) + "\uac74*\n";
-    msg += "`5\ub2e8\uacc4` \uc2ec\ub9ac   : \u2192 *" + (meta.step5 || 0) + "\uac74*\n";
-    msg += "`6\ub2e8\uacc4` \uae30\uc138   : \u2192 *" + (meta.step6 || 0) + "\uac74*\n\n";
-    msg += step6 > 0
-      ? "\ud83d\udd25 \ucd5c\uc885 \ud1b5\uacfc \uc885\ubaa9 *" + step6 + "\uac1c*! \ub9ac\ud3ec\ud2b8\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694."
+    msg += "`5\ub2e8\uacc4` \ubaa8\uba58\ud140 : \u2192 *" + step5 + "\uac74*\n\n";
+    msg += step5 > 0
+      ? "\ud83d\udd25 \ucd5c\uc885 \ud1b5\uacfc \uc885\ubaa9 *" + step5 + "\uac1c*! \ub9ac\ud3ec\ud2b8\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694."
       : "\ud83d\udee1\ufe0f \uc624\ub298\uc740 \uae30\uc900 \ucda9\uc871 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \ud604\uae08 \ubcf4\uc720 \uad8c\uace0!";
     return msg;
   } catch (e) {

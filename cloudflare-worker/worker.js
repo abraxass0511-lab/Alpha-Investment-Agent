@@ -85,9 +85,15 @@ export default {
         const result = {
           holdings: [],
           buying_power: buyingPower,
+          api_error: false,
+          error_detail: "",
         };
 
-        if (holdings && holdings.length > 0) {
+        // ★ KIS 잔고 조회 실패 시 에러 플래그 설정 (클라이언트가 폴백 판단용)
+        if (!holdings) {
+          result.api_error = true;
+          result.error_detail = "KIS 잔고 조회 실패 (토큰 만료 또는 서버 점검)";
+        } else if (holdings.length > 0) {
           result.holdings = holdings
             .filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0)
             .map(h => ({

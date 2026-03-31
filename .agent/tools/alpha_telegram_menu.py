@@ -125,6 +125,10 @@ def handle_total_return():
             )
             if r.status_code == 200:
                 data = r.json()
+                # ★ Worker가 KIS 실패를 감지한 경우 → KIS 직접 폴백
+                if data.get("api_error"):
+                    print(f"⚠️ Worker KIS 에러: {data.get('error_detail')} → KIS 직접 폴백")
+                    raise Exception("Worker KIS API error")
                 holdings = data.get("holdings", [])
                 usd_amt = data.get("buying_power", "0")
 
@@ -216,6 +220,9 @@ def handle_stock_return():
             )
             if r.status_code == 200:
                 data = r.json()
+                if data.get("api_error"):
+                    print(f"⚠️ Worker KIS 에러 → KIS 직접 폴백")
+                    raise Exception("Worker KIS API error")
                 holdings = data.get("holdings", [])
                 if not holdings:
                     return "📈 *종목별 수익률*\n\n📭 보유 종목이 없습니다, 대표님."
@@ -292,6 +299,9 @@ def handle_deposit():
             )
             if r.status_code == 200:
                 data = r.json()
+                if data.get("api_error"):
+                    print(f"⚠️ Worker KIS 에러 → KIS 직접 폴백")
+                    raise Exception("Worker KIS API error")
                 usd_amt = data.get("buying_power", "0")
                 holdings = data.get("holdings", [])
 
@@ -366,6 +376,9 @@ def handle_balance():
             )
             if r.status_code == 200:
                 data = r.json()
+                if data.get("api_error"):
+                    print(f"⚠️ Worker KIS 에러 → KIS 직접 폴백")
+                    raise Exception("Worker KIS API error")
                 holdings = data.get("holdings", [])
                 usd_amt = data.get("buying_power", "0")
 

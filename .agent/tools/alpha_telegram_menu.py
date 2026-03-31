@@ -656,9 +656,9 @@ def process_updates():
         print("📭 새 메시지 없음.")
         return
 
-    # 현재 시간 기준 35분 이내 메시지만 처리 (30분 간격 + 5분 버퍼)
+    # 현재 시간 기준 10분 이내 메시지만 처리 (5분 간격 + 5분 버퍼)
     now = time.time()
-    cutoff = now - 2100  # 35분 = 2100초
+    cutoff = now - 600  # 10분 = 600초
 
     processed = 0
     for update in updates:

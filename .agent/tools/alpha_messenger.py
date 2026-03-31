@@ -18,6 +18,46 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 _gemini_fail_count = 0
 
 
+def get_fear_greed_index():
+    """CNN Fear & Greed Index 조회 (0~100)"""
+    try:
+        r = requests.get(
+            "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+                "Referer": "https://edition.cnn.com/markets/fear-and-greed",
+            },
+            timeout=10,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            fg = data.get("fear_and_greed", {})
+            score = fg.get("score", None)
+            if score is not None:
+                score = round(float(score))
+                # 구간 판정
+                if score <= 25:
+                    label = "Extreme Fear (극도의 공포)"
+                    emoji = "🔴"
+                elif score <= 44:
+                    label = "Fear (공포)"
+                    emoji = "🟠"
+                elif score <= 55:
+                    label = "Neutral (중립)"
+                    emoji = "🟡"
+                elif score <= 74:
+                    label = "Greed (탐욕)"
+                    emoji = "🟢"
+                else:
+                    label = "Extreme Greed (극도의 탐욕)"
+                    emoji = "🟣"
+                return {"score": score, "label": label, "emoji": emoji}
+    except Exception as e:
+        print(f"⚠️ 공포지수 조회 에러: {e}")
+    return None
+
+
 def _gemini_stock_analysis(symbol, name, data_dict):
     """Gemini Flash로 종목별 매수 근거 1~2문장 생성 (읽기 전용, 숫자 조작 불가)"""
     global _gemini_fail_count
@@ -540,7 +580,24 @@ def report_daily_picks():
     if _now.year == 2027 and _now.month == 12:
         footer += "\n\n🚨 *[관리자 알림] 2028년도 미국장 휴장일 달력 업데이트가 필요합니다! 저(알파)에게 갱신을 요청해 주세요.*"
 
-    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + footer + "\n\n" + portfolio_section
+    # ── 참고 지표: CNN Fear & Greed Index ──
+    fear_greed_section = ""
+    fg = get_fear_greed_index()
+    if fg:
+        fear_greed_section = (
+            f"\n\n━━━━━━━━━\n"
+            f"📡 *참고 지표*\n"
+            f"{fg['emoji']} 공포·탐욕 지수: *{fg['score']}* ({fg['label']})\n"
+            f"└ 0~25 극도의 공포 | 26~44 공포 | 45~55 중립 | 56~74 탐욕 | 75~100 극도의 탐욕"
+        )
+    else:
+        fear_greed_section = (
+            "\n\n━━━━━━━━━\n"
+            "📡 *참고 지표*\n"
+            "⚠️ 공포·탐욕 지수 조회 실패"
+        )
+
+    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + footer + fear_greed_section + "\n\n" + portfolio_section
     
     # 3. 로컬 파일 저장 (메모장 대용)
     if not os.path.exists("output_reports"): os.makedirs("output_reports")

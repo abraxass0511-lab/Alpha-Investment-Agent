@@ -1,1 +1,2 @@
-
+Symbol,Name,Price,Momentum(%),Sentiment,SMA5,ROE(%),MarketCap_M,MA50,Surprise(%),EPS_Growth(%),Status,Reason,Momentum_12_1
+T,AT&T,28.78,5.78,0.733,0.608,20.41,203682,27.21,10.2,-5.6,BUY (매수 승인 대기),"MarketAux ML 📊 today=0.733 SMA₅=0.608 (3/3건, 관련도≥0.8, 출처: seekingalpha.com, zacks.com) | 12-1 모멘텀: 3.38%",0.0338

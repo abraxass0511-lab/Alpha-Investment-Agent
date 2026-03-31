@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-03-30 21:39",
+  "timestamp": "2026-03-31 02:27",
   "sell": [
     {
       "symbol": "JBL",
@@ -9,13 +9,21 @@
       "pnl_rate": -1.64,
       "pnl_amt": -78.53,
       "reasons": [
-        "1~4단계 탈락: 오늘 스캔에서 기준 미달로 제외됨"
+        "3단계(에너지) 탈락: 종가 $247.48 < 50MA $255.50"
       ],
       "action": "SELL"
     }
   ],
-  "buy": [],
+  "buy": [
+    {
+      "symbol": "T",
+      "name": "AT&T",
+      "price": "28.78",
+      "reason": "MarketAux ML 📊 today=0.733 SMA₅=0.608 (3/3건, 관련도≥0.8, 출처: seekingalpha.com, zacks.com) | 12-1 모멘텀: 3.38%",
+      "action": "BUY"
+    }
+  ],
   "held_count": 1,
   "scan_passed": 23,
-  "picks_passed": 0
+  "picks_passed": 1
 }

@@ -76,10 +76,10 @@ def _gemini_stock_analysis(symbol, name, data_dict):
 - 한국어 1~2문장으로만 답변하세요
 - 이모지 1개만 앞에 붙이세요"""
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 100},
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 200},
         }
         r = requests.post(url, json=payload, timeout=10)
         if r.status_code == 200:
@@ -95,7 +95,7 @@ def _gemini_stock_analysis(symbol, name, data_dict):
             
             # 2초 대기 후 flash-lite로 재시도
             time.sleep(2)
-            fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={GEMINI_API_KEY}"
+            fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={GEMINI_API_KEY}"
             try:
                 r2 = requests.post(fallback_url, json=payload, timeout=10)
                 if r2.status_code == 200:

@@ -257,6 +257,20 @@ def report_daily_picks():
         print("❌ 메타데이터 없음. 전수 조사가 완료되지 않았을 수 있습니다.")
         return
 
+    # 1-1. ★ 중복 발송 방지: 같은 trading_date 보고서 2번 보내지 않기
+    trading_date = meta.get("trading_date", "")
+    sent_lock_file = "output_reports/last_sent_date.txt"
+    if trading_date:
+        try:
+            if os.path.exists(sent_lock_file):
+                with open(sent_lock_file, "r") as f:
+                    last_sent = f.read().strip()
+                if last_sent == trading_date:
+                    print(f"⚠️ {trading_date} 보고서 이미 발송됨 → 중복 발송 방지. 스킵합니다.")
+                    return
+        except:
+            pass
+
     # 2. 100% 성공 여부 확인 (절대 규칙: 누락 시 보내지 않고 재시도 대기)
     if not meta.get("success_all", False):
         print("🚨 데이터 수집 미완료. 리포트를 보내지 않습니다. 재시도를 대기합니다.")
@@ -537,6 +551,14 @@ def report_daily_picks():
 
     send_telegram_message(message)
     print(f"✅ 리포트 전송 및 로컬 저장 완료! (report_{date_str}.md)")
+
+    # ★ 중복 발송 방지: 발송 성공 후 잠금 파일 기록
+    try:
+        with open("output_reports/last_sent_date.txt", "w") as f:
+            f.write(trading_date)
+        print(f"🔒 발송 잠금 기록: {trading_date}")
+    except:
+        pass
 
 if __name__ == "__main__":
     # 메신저는 스캐너가 만든 결과를 발송하는 역할.

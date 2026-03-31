@@ -14,6 +14,11 @@ on:
           - 'false'
           - 'true'
 
+# ★ 동시 실행 방지: cron 중복 트리거 시 이전 실행이 진행 중이면 새 실행 취소
+concurrency:
+  group: alpha-daily-report
+  cancel-in-progress: true
+
 jobs:
   run-alpha:
     runs-on: ubuntu-latest

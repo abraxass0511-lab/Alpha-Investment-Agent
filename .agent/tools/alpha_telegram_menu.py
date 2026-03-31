@@ -8,7 +8,7 @@ alpha_telegram_menu.py — 에이전트 알파 텔레그램 메뉴 봇
   📈 종목별 수익률 — 보유 종목 개별 수익률
   💵 예수금 현황 — 매수 가능 금액
   💰 실시간 잔고 — 보유 종목 수량 및 평가금액
-  🔍 오늘자 스캔 — 6단계 필터 결과 요약
+  🔍 오늘자 스캔 — 5단계 필터 결과 요약
   🛑 긴급 전량 매도 — 모든 포지션 즉시 정리
 """
 
@@ -439,8 +439,18 @@ def handle_balance():
 
 
 def handle_today_scan():
-    """🔍 오늘자 스캔"""
+    """🔍 오늘자 스캔 — 최신 결과를 repo에서 가져온 후 표시"""
     try:
+        # ★ 최신 스캔 결과 pull (daily 워크플로우가 커밋한 데이터)
+        import subprocess
+        try:
+            subprocess.run(
+                ["git", "pull", "--rebase", "--quiet"],
+                timeout=15, capture_output=True
+            )
+        except Exception:
+            pass  # pull 실패해도 기존 파일로 진행
+
         meta_path = "output_reports/metadata.json"
         if not os.path.exists(meta_path):
             return "🔍 *오늘자 스캔*\n\n❌ 아직 오늘 스캔이 실행되지 않았습니다."
@@ -534,7 +544,17 @@ def _is_market_open():
     return 570 <= hour_min <= 960  # 9:30~16:00
 
 def _load_buy_symbols():
-    """final_picks_latest.csv에서 매수 종목 심볼 로드"""
+    """final_picks_latest.csv에서 매수 종목 심볼 로드 (5단계 파이프라인 기준)"""
+    # ★ 최신 결과 pull (daily 워크플로우가 커밋한 데이터)
+    import subprocess
+    try:
+        subprocess.run(
+            ["git", "pull", "--rebase", "--quiet"],
+            timeout=15, capture_output=True
+        )
+    except Exception:
+        pass
+
     import csv as csv_mod
     picks_path = "output_reports/final_picks_latest.csv"
     if not os.path.exists(picks_path):
@@ -542,7 +562,13 @@ def _load_buy_symbols():
     try:
         with open(picks_path, "r") as f:
             reader = csv_mod.DictReader(f)
-            return [row["Symbol"] for row in reader if float(row.get("Sentiment", 0)) >= 0.7]
+            # V6: Sentiment 필터 제거 → Status=BUY인 종목만 (5단계 모멘텀 기준)
+            symbols = []
+            for row in reader:
+                status = row.get("Status", "")
+                if "BUY" in status:
+                    symbols.append(row["Symbol"])
+            return symbols
     except:
         return []
 

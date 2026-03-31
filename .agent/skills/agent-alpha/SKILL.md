@@ -13,7 +13,7 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 | :--- | :--- | :--- | :--- |
 | **1+2단계** | **체급+내실 (Size+Quality)** | **시가총액 $10B 이상, ROE 15% 이상** | Finnhub |
 | **3단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | Finnhub |
-| **4단계** | **성장 (Growth)** | **Surprise > 10%** | Finnhub API |
+| **4단계** | **성장 (Growth)** | **Surprise ≥ 10% OR EPS Growth ≥ 20%** | Finnhub API |
 | **5단계** | **모멘텀 Elite 5** | **12-1개월 모멘텀 양수 + 상위 5개** | Finnhub Candle |
 
 ## ⚙️ Operational Strategy

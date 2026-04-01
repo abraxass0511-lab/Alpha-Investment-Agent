@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-01 03:03",
+  "timestamp": "2026-04-01 03:23",
   "sell": [],
   "buy": [
     {
@@ -29,16 +29,11 @@
       "price": "250.58",
       "reason": "12-1 모멘텀: 242.78% | Top 5 선정",
       "action": "BUY"
-    },
-    {
-      "symbol": "GEV",
-      "name": "GE Vernova",
-      "price": "872.9",
-      "reason": "12-1 모멘텀: 179.83% | Top 5 선정",
-      "action": "BUY"
     }
   ],
   "held_count": 1,
+  "remaining_held": 1,
+  "available_slots": 4,
   "scan_passed": 28,
   "picks_passed": 5
 }

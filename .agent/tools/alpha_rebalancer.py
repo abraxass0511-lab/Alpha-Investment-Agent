@@ -323,9 +323,22 @@ def run_rebalancer():
             print("✅ 모든 보유 종목 적격 — 매도 추천 없음.")
 
     # 4. 매수 추천 (보유하지 않은 신규 선정 종목)
-    print("\n🔍 [4] 신규 매수 종목 확인...")
+    #    ★ 최대 5종목 규칙: 보유 유지 종목을 제외한 남은 슬롯만큼만 추천
+    MAX_PORTFOLIO = 5
+    remaining_held = len(held_stocks) - len(sell_recs)  # 매도되지 않고 유지될 종목 수
+    available_slots = max(0, MAX_PORTFOLIO - remaining_held)
+
+    print(f"\n🔍 [4] 신규 매수 종목 확인...")
+    print(f"   📊 보유 유지: {remaining_held}종목 | 매수 가능 슬롯: {available_slots}개 (최대 {MAX_PORTFOLIO}종목)")
+
     held_symbols = [s["symbol"] for s in held_stocks]
     buy_recs = get_buy_recommendations(held_symbols, picks_data)
+
+    # ★ 가용 슬롯 제한 적용 (모멘텀 순위 우선)
+    if len(buy_recs) > available_slots:
+        print(f"   ⚠️ 매수 후보 {len(buy_recs)}개 → {available_slots}개로 제한 (보유 유지 {remaining_held}종목 고려)")
+        buy_recs = buy_recs[:available_slots]
+
     if buy_recs:
         print(f"📈 매수 추천: {len(buy_recs)}종목")
         for b in buy_recs:
@@ -339,6 +352,8 @@ def run_rebalancer():
         "sell": sell_recs,
         "buy": buy_recs,
         "held_count": len(held_stocks),
+        "remaining_held": remaining_held,
+        "available_slots": available_slots,
         "scan_passed": len(scan_data),
         "picks_passed": len(picks_data),
     }
@@ -349,7 +364,7 @@ def run_rebalancer():
         json.dump(recommendations, f, indent=2, ensure_ascii=False)
 
     print(f"\n💾 리밸런싱 분석 저장: {output_path}")
-    print(f"   매도 추천: {len(sell_recs)}건 / 매수 추천: {len(buy_recs)}건")
+    print(f"   매도 추천: {len(sell_recs)}건 / 매수 추천: {len(buy_recs)}건 (보유 유지: {remaining_held})")
 
     return recommendations
 

@@ -1160,7 +1160,7 @@ async function handleUpdate(update, env) {
           "Accept": "application/vnd.github+json",
           "User-Agent": "Alpha-Bot",
         },
-        body: JSON.stringify({ ref: "main" }),
+        body: JSON.stringify({ ref: "main", inputs: { force_rescan: "true", force_send: "true" } }),
       });
       if (r.ok || r.status === 204) {
         await sendMessage(env, "\ud83d\udd04 *\uc2a4\uce94 \uc7ac\uc2dc\ub3c4 \uc2dc\uc791!*\n\n\uc57d 20~30\ubd84 \ud6c4 \uacb0\uacfc\ub97c \uc54c\ub824\ub4dc\ub9ac\uaca0\uc2b5\ub2c8\ub2e4, \ub300\ud45c\ub2d8.", REPLY_KEYBOARD);

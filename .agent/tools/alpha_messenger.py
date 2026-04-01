@@ -339,9 +339,11 @@ def report_daily_picks():
         return
 
     # 1-1. ★ 중복 발송 방지: 같은 trading_date 보고서 2번 보내지 않기
+    #       단, FORCE_SEND=1 (텔레그램 "시도" 명령) 시에는 강제 재발송
     trading_date = meta.get("trading_date", "")
+    force_send = os.getenv("FORCE_SEND", "0") == "1"
     sent_lock_file = "output_reports/last_sent_date.txt"
-    if trading_date:
+    if trading_date and not force_send:
         try:
             if os.path.exists(sent_lock_file):
                 with open(sent_lock_file, "r") as f:
@@ -351,6 +353,8 @@ def report_daily_picks():
                     return
         except:
             pass
+    elif force_send:
+        print(f"🔄 FORCE_SEND=1 → 중복 발송 잠금 무시, 강제 재발송합니다.")
 
     # 2. 100% 성공 여부 확인 (절대 규칙: 누락 시 보내지 않고 재시도 대기)
     if not meta.get("success_all", False):

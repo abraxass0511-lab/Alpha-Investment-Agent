@@ -13,6 +13,14 @@ on:
         options:
           - 'false'
           - 'true'
+      force_send:
+        description: '중복 발송 잠금 무시 (시도 명령용)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 # ★ 동시 실행 방지: cron 중복 트리거 시 이전 실행이 진행 중이면 새 실행 취소
 concurrency:
@@ -93,6 +101,8 @@ jobs:
       id: messenger
       if: steps.scanner.outputs.scan_success == 'True'
       continue-on-error: true
+      env:
+        FORCE_SEND: ${{ github.event.inputs.force_send == 'true' && '1' || '0' }}
       run: python .agent/tools/alpha_messenger.py
 
     - name: Save results to repo

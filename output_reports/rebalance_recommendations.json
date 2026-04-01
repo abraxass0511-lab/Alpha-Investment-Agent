@@ -1,57 +1,44 @@
 {
-  "timestamp": "2026-03-31 04:03",
-  "sell": [
-    {
-      "symbol": "JBL",
-      "qty": 19,
-      "buy_avg": 251.613,
-      "current": 247.48,
-      "pnl_rate": -1.64,
-      "pnl_amt": -78.53,
-      "reasons": [
-        "3단계(에너지) 탈락: 종가 $247.48 < 50MA $255.50"
-      ],
-      "action": "SELL"
-    }
-  ],
+  "timestamp": "2026-04-01 03:03",
+  "sell": [],
   "buy": [
     {
       "symbol": "LITE",
       "name": "Lumentum",
-      "price": "654.79",
-      "reason": "12-1 모멘텀: 1024.33% | Top 5 선정",
+      "price": "702.76",
+      "reason": "12-1 모멘텀: 1131.72% | Top 5 선정",
+      "action": "BUY"
+    },
+    {
+      "symbol": "FIX",
+      "name": "Comfort Systems USA",
+      "price": "1378.99",
+      "reason": "12-1 모멘텀: 336.83% | Top 5 선정",
+      "action": "BUY"
+    },
+    {
+      "symbol": "TER",
+      "name": "Teradyne",
+      "price": "296.46",
+      "reason": "12-1 모멘텀: 295.88% | Top 5 선정",
       "action": "BUY"
     },
     {
       "symbol": "VRT",
       "name": "Vertiv",
-      "price": "234.22",
-      "reason": "12-1 모멘텀: 253.39% | Top 5 선정",
+      "price": "250.58",
+      "reason": "12-1 모멘텀: 242.78% | Top 5 선정",
       "action": "BUY"
     },
     {
       "symbol": "GEV",
       "name": "GE Vernova",
-      "price": "817.35",
-      "reason": "12-1 모멘텀: 186.84% | Top 5 선정",
-      "action": "BUY"
-    },
-    {
-      "symbol": "KEYS",
-      "name": "Keysight Technologies",
-      "price": "269.41",
-      "reason": "12-1 모멘텀: 105.2% | Top 5 선정",
-      "action": "BUY"
-    },
-    {
-      "symbol": "DELL",
-      "name": "Dell Technologies",
-      "price": "164.66",
-      "reason": "12-1 모멘텀: 65.47% | Top 5 선정",
+      "price": "872.9",
+      "reason": "12-1 모멘텀: 179.83% | Top 5 선정",
       "action": "BUY"
     }
   ],
   "held_count": 1,
-  "scan_passed": 23,
+  "scan_passed": 28,
   "picks_passed": 5
 }

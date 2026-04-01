@@ -197,8 +197,7 @@ export default {
       const fillPend = await env.KV.get("pending_fill_check");
       if (fillPend) {
         const fillData = JSON.parse(fillPend);
-        const nowUTC = new Date();
-        const etHour = (nowUTC.getUTCHours() - 5 + 24) % 24;
+        const etHour = getETHour();
 
         // 체결 내역 조회 (장 마감 시에도 최종 확인 실행)
         const orders = await checkOrderFills(env);
@@ -210,67 +209,64 @@ export default {
             await sendMessage(env, "\u26a0\ufe0f *[\uccb4\uacb0 \ud655\uc778 \uc2e4\ud328]*\n\n\uc7a5 \ub9c8\uac10\uae4c\uc9c0 \uccb4\uacb0 \ub0b4\uc5ed \uc870\ud68c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\nKIS API \uc751\ub2f5 \uc624\ub958\uc785\ub2c8\ub2e4, \ub300\ud45c\ub2d8.\n\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \uccb4\uacb0 \uc5ec\ubd80\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.", REPLY_KEYBOARD);
             await env.KV.delete("pending_fill_check");
           }
-          // 장 중이면 다음 cron에서 재시도
-          return;
-        }
+          // 장 중이면 → fill check만 스킵, 아래 예약 주문은 계속 실행
+        } else {
+          const symbols = fillData.symbols || [];
+          let filledAll = true;
+          let msg = "\ud83d\udcca *[\uccb4\uacb0 \uc54c\ub9bc]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+          let filledCount = 0;
 
-        const symbols = fillData.symbols || [];
-        let filledAll = true;
-        let msg = "\ud83d\udcca *[\uccb4\uacb0 \uc54c\ub9bc]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
-        let filledCount = 0;
+          if (orders.length > 0) {
+            for (const ord of orders) {
+              const sym = ord.pdno || ord.ovrs_pdno || "?";
+              if (symbols.length > 0 && !symbols.includes(sym)) continue;
 
-        if (orders.length > 0) {
-          for (const ord of orders) {
-            const sym = ord.pdno || ord.ovrs_pdno || "?";
-            if (symbols.length > 0 && !symbols.includes(sym)) continue;
+              const side = ord.sll_buy_dvsn_cd === "02" ? "\ub9e4\uc218" : "\ub9e4\ub3c4";
+              const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
+              const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
+              const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
 
-            const side = ord.sll_buy_dvsn_cd === "02" ? "\ub9e4\uc218" : "\ub9e4\ub3c4";
-            const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
-            const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
-            const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
+              if (fillQty > 0) {
+                filledCount++;
+                const emoji = side === "\ub9e4\uc218" ? "\u2705" : "\ud83d\udd3b";
+                msg += `${emoji} *${sym}* ${side} \uccb4\uacb0 \uc644\ub8cc!\n`;
+                msg += `   \ud83d\udcca ${fillQty}\uc8fc \u00d7 $${parseFloat(fillPrice).toFixed(2)}\n\n`;
+              } else {
+                filledAll = false;
+              }
+            }
+          }
 
-            if (fillQty > 0) {
-              filledCount++;
-              const emoji = side === "\ub9e4\uc218" ? "\u2705" : "\ud83d\udd3b";
-              msg += `${emoji} *${sym}* ${side} \uccb4\uacb0 \uc644\ub8cc!\n`;
-              msg += `   \ud83d\udcca ${fillQty}\uc8fc \u00d7 $${parseFloat(fillPrice).toFixed(2)}\n\n`;
+          if (filledCount > 0 && filledAll) {
+            // 전부 체결 → 알림 보내고 KV 삭제
+            await sendMessage(env, msg, REPLY_KEYBOARD);
+            await env.KV.delete("pending_fill_check");
+          } else if (filledCount > 0 && !filledAll) {
+            // 일부만 체결 → 체결된 것 알리고 계속 대기
+            msg += "_\ub098\uba38\uc9c0 \uc885\ubaa9 \uccb4\uacb0 \ub300\uae30 \uc911..._";
+            await sendMessage(env, msg, REPLY_KEYBOARD);
+          } else if (etHour >= 16 && etHour < 21) {
+            // 장 마감인데 체결 감지 못함 → 최종 알림 후 정리
+            let closeMsg = "\ud83d\udd52 *[\uc7a5 \ub9c8\uac10 \uccb4\uacb0 \ud655\uc778]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+            if (orders.length === 0) {
+              closeMsg += "\u26a0\ufe0f \uc624\ub298 \uc8fc\ubb38 \ub0b4\uc5ed\uc774 \uc870\ud68c\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.\n";
             } else {
-              filledAll = false;
+              closeMsg += "\u26a0\ufe0f \uccb4\uacb0 \uac10\uc9c0\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\n";
+              closeMsg += `\ud83d\udcdd \uc870\ud68c\ub41c \uc8fc\ubb38: ${orders.length}\uac74\n`;
+              if (orders[0]) {
+                const keys = Object.keys(orders[0]).join(", ");
+                closeMsg += `\ud83d\udd0d \uc751\ub2f5 \ud544\ub4dc: _${keys.substring(0, 200)}_\n`;
+              }
             }
+            closeMsg += "\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \ud655\uc778\ud574 \uc8fc\uc138\uc694, \ub300\ud45c\ub2d8.";
+            await sendMessage(env, closeMsg, REPLY_KEYBOARD);
+            await env.KV.delete("pending_fill_check");
           }
+          // 장 중 + filledCount === 0 → 다음 cron에서 재시도 (fill check만)
         }
-
-        if (filledCount > 0 && filledAll) {
-          // 전부 체결 → 알림 보내고 KV 삭제
-          await sendMessage(env, msg, REPLY_KEYBOARD);
-          await env.KV.delete("pending_fill_check");
-        } else if (filledCount > 0 && !filledAll) {
-          // 일부만 체결 → 체결된 것 알리고 계속 대기
-          msg += "_\ub098\uba38\uc9c0 \uc885\ubaa9 \uccb4\uacb0 \ub300\uae30 \uc911..._";
-          await sendMessage(env, msg, REPLY_KEYBOARD);
-        } else if (etHour >= 16 && etHour < 21) {
-          // 장 마감인데 체결 감지 못함 → 최종 알림 후 정리
-          let closeMsg = "\ud83d\udd52 *[\uc7a5 \ub9c8\uac10 \uccb4\uacb0 \ud655\uc778]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
-          if (orders.length === 0) {
-            closeMsg += "\u26a0\ufe0f \uc624\ub298 \uc8fc\ubb38 \ub0b4\uc5ed\uc774 \uc870\ud68c\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.\n";
-          } else {
-            closeMsg += "\u26a0\ufe0f \uccb4\uacb0 \uac10\uc9c0\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\n";
-            closeMsg += `\ud83d\udcdd \uc870\ud68c\ub41c \uc8fc\ubb38: ${orders.length}\uac74\n`;
-            // 디버깅용: 첫 번째 주문의 필드명 출력
-            if (orders[0]) {
-              const keys = Object.keys(orders[0]).join(", ");
-              closeMsg += `\ud83d\udd0d \uc751\ub2f5 \ud544\ub4dc: _${keys.substring(0, 200)}_\n`;
-            }
-          }
-          closeMsg += "\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \ud655\uc778\ud574 \uc8fc\uc138\uc694, \ub300\ud45c\ub2d8.";
-          await sendMessage(env, closeMsg, REPLY_KEYBOARD);
-          await env.KV.delete("pending_fill_check");
-        }
-        // 장 중 + filledCount === 0 → 다음 cron에서 재시도
-        return;  // 체결 확인 모드에서는 여기서 종료
       }
 
-      // === B. 예약 주문 실행 (장 개장 cron에서 실행) ===
+      // === B. 예약 주문 실행 (항상 독립적으로 체크) ===
 
       // 1. 긴급 전량 매도 예약 실행
       const sellPend = await env.KV.get("pending_sell");
@@ -942,6 +938,22 @@ const US_HOLIDAYS = [
   "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31",
   "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24"
 ];
+
+// US Eastern Time 시간 반환 (EDT/EST 자동 감지)
+function getETHour() {
+  const now = new Date();
+  // Intl API로 정확한 US Eastern 시간 추출
+  try {
+    const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit" });
+    return parseInt(etStr);
+  } catch {
+    // Intl 미지원 환경 폴백: 3월 둘째 일요일~11월 첫째 일요일 = EDT(UTC-4), 나머지 EST(UTC-5)
+    const utcMonth = now.getUTCMonth(); // 0-indexed
+    const isDST = utcMonth >= 2 && utcMonth <= 10; // 3월~11월 (대략적)
+    const offset = isDST ? 4 : 5;
+    return (now.getUTCHours() - offset + 24) % 24;
+  }
+}
 
 function isTradingDay(dateObj) {
   const utcDay = dateObj.getUTCDay();

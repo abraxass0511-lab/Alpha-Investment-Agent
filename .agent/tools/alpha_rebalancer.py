@@ -238,20 +238,8 @@ def check_held_against_scan(held_stocks, scan_data, picks_data):
                 f"ROE {roe:.1f}%, "
                 f"종가 ${price:.2f} vs 50MA ${ma50:.2f}, "
                 f"Surprise {surprise:.1f}%/Growth {eps_growth:.1f}%, "
-                f"센티먼트 {sent_score:.3f} (SMA₅: {sma5_str}), "
                 f"모멘텀 {momentum_pct:.1f}%"
             )
-
-            # ★ 5단계(심리) 보유종목 기준: ≥ 0.5 유지 (비대칭 임계값)
-            if sym in sentiment_data:
-                if sent_score < 0.5:
-                    reasons.append(
-                        f"5단계(심리) 탈락: 센티먼트 {sent_score:.3f} < 0.5 "
-                        f"(SMA₅: {sma5_str}) — {stage_full_summary}"
-                    )
-            else:
-                # ★ No News Rule: 보유 종목 뉴스 없음 → "무소식이 희소식" → 유지(Hold)
-                pass
 
         else:
             # 스캔에 없음 → 어느 단계에서 탈락했는지 진단

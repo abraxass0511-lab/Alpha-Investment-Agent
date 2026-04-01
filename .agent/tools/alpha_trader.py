@@ -150,35 +150,52 @@ class AlphaTrader:
     #    → 보유 종목 목록 + 평가손익
     # ───────────────────────────────────────────────────────────
     def get_balance(self):
-        """보유 종목과 평가손익을 조회합니다."""
+        """보유 종목과 평가손익을 조회합니다. (NASD+NYSE+AMEX 전체)"""
         token = self.get_access_token()
         if not token:
             return None
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-
-        # 공식 tr_id: 모의투자 VTTS3012R / 실전 TTTS3012R
         headers = self._make_headers("VTTS3012R")
-        params = {
-            "CANO": self.cano,
-            "ACNT_PRDT_CD": self.acnt_prdt_cd,
-            "OVRS_EXCG_CD": "NASD",
-            "TR_CRCY_CD": "USD",
-            "CTX_AREA_FK200": "",
-            "CTX_AREA_NK200": ""
-        }
 
-        try:
-            res = requests.get(url, headers=headers, params=params)
-            data = res.json()
-            if data.get('rt_cd') == '0':
-                return data.get('output1', []), data.get('output2', {})
-            else:
-                print(f"❌ 잔고 조회 실패: {data.get('msg1')}")
-                return None
-        except Exception as e:
-            print(f"🚨 잔고 조회 에러: {e}")
+        all_holdings = []
+        bal_summary = {}
+
+        for excg in ["NASD", "NYSE", "AMEX"]:
+            params = {
+                "CANO": self.cano,
+                "ACNT_PRDT_CD": self.acnt_prdt_cd,
+                "OVRS_EXCG_CD": excg,
+                "TR_CRCY_CD": "USD",
+                "CTX_AREA_FK200": "",
+                "CTX_AREA_NK200": ""
+            }
+
+            try:
+                res = requests.get(url, headers=headers, params=params)
+                data = res.json()
+                if data.get('rt_cd') == '0':
+                    all_holdings.extend(data.get('output1', []))
+                    if not bal_summary:
+                        bal_summary = data.get('output2', {})
+                else:
+                    print(f"⚠️ {excg} 잔고 조회 실패: {data.get('msg1')}")
+            except Exception as e:
+                print(f"⚠️ {excg} 잔고 조회 에러: {e}")
+
+        if not all_holdings and not bal_summary:
             return None
+
+        # 중복 제거 (같은 종목이 여러 거래소에서 반환될 경우)
+        seen = set()
+        unique_holdings = []
+        for h in all_holdings:
+            sym = h.get('ovrs_pdno', '')
+            if sym and sym not in seen:
+                seen.add(sym)
+                unique_holdings.append(h)
+
+        return unique_holdings, bal_summary
 
     # ───────────────────────────────────────────────────────────
     # 5. 해외주식 매수 주문 [v1_해외주식-001]

@@ -417,34 +417,48 @@ async function getBalance(env, _retry = false) {
   if (!token) return null;
 
   const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-balance`;
-  const params = new URLSearchParams({
-    CANO: env.KIS_CANO,
-    ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
-    OVRS_EXCG_CD: "NASD",
-    TR_CRCY_CD: "USD",
-    CTX_AREA_FK200: "",
-    CTX_AREA_NK200: "",
-  });
+  const exchanges = ["NASD", "NYSE", "AMEX"];
+  let allHoldings = [];
 
-  const r = await fetch(`${url}?${params}`, {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      appkey: env.KIS_APP_KEY,
-      appsecret: env.KIS_SECRET_KEY,
-      "tr_id": "VTTS3012R",
-    },
-  });
+  for (const excg of exchanges) {
+    const params = new URLSearchParams({
+      CANO: env.KIS_CANO,
+      ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+      OVRS_EXCG_CD: excg,
+      TR_CRCY_CD: "USD",
+      CTX_AREA_FK200: "",
+      CTX_AREA_NK200: "",
+    });
 
-  const data = await r.json();
-  if (data.rt_cd === "0") return data.output1 || [];
-  // Token expired - force refresh and retry ONCE
-  if (!_retry) {
-    _cachedToken = null;
-    _tokenIssuedAt = 0;
-    return getBalance(env, true);
+    const r = await fetch(`${url}?${params}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        appkey: env.KIS_APP_KEY,
+        appsecret: env.KIS_SECRET_KEY,
+        "tr_id": "VTTS3012R",
+      },
+    });
+
+    const data = await r.json();
+    if (data.rt_cd === "0" && data.output1) {
+      allHoldings = allHoldings.concat(data.output1);
+    } else if (data.rt_cd !== "0" && !_retry) {
+      // Token expired - force refresh and retry ONCE
+      _cachedToken = null;
+      _tokenIssuedAt = 0;
+      return getBalance(env, true);
+    }
   }
-  return null;
+
+  // 중복 제거 (같은 종목이 여러 거래소에서 반환될 경우)
+  const seen = new Set();
+  return allHoldings.filter(h => {
+    const sym = h.ovrs_pdno || "";
+    if (seen.has(sym)) return false;
+    seen.add(sym);
+    return true;
+  });
 }
 
 async function getBuyingPower(env, _retry = false) {

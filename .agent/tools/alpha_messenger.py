@@ -202,6 +202,35 @@ def _save_deposit_cache(usd_amt):
         pass
 
 
+def _get_holdings_fallback_kis():
+    """Worker 실패 시 KIS API 직접 호출로 보유종목을 조회합니다."""
+    try:
+        from alpha_trader import AlphaTrader
+        trader = AlphaTrader()
+        result = trader.get_balance()
+        if not result:
+            return []
+
+        raw_holdings, _ = result
+        holdings = []
+        for h in raw_holdings:
+            qty = int(h.get('ovrs_cblc_qty', '0'))
+            if qty > 0:
+                holdings.append({
+                    "symbol": h.get('ovrs_pdno', '?'),
+                    "qty": qty,
+                    "buy_avg": float(h.get('pchs_avg_pric', '0')),
+                    "current": float(h.get('now_pric2', '0')),
+                    "pnl_rate": float(h.get('evlu_pfls_rt', '0')),
+                    "pnl_amt": float(h.get('frcr_evlu_pfls_amt', '0')),
+                })
+        print(f"✅ KIS 직접 폴백 성공: {len(holdings)}종목")
+        return holdings
+    except Exception as e:
+        print(f"⚠️ KIS 직접 폴백 실패: {e}")
+        return []
+
+
 def get_portfolio_section():
     """보유종목 현황과 예수금을 Cloudflare Worker 경유로 조회합니다."""
     try:
@@ -222,6 +251,14 @@ def get_portfolio_section():
         data = r.json()
         holdings = data.get("holdings", [])
         usd_amt = data.get("buying_power", "0")
+        api_error = data.get("api_error", False)
+
+        # ★ Worker API 실패 시 KIS 직접 폴백
+        if api_error or (not holdings and float(usd_amt or "0") > 0):
+            print(f"⚠️ Worker 잔고 조회 실패 (api_error={api_error}), KIS 직접 폴백 시도...")
+            fallback = _get_holdings_fallback_kis()
+            if fallback:
+                holdings = fallback
 
         # 예수금 $0 폴백: KIS 직접 조회 (GitHub Actions에서 실행 시)
         if float(usd_amt or "0") <= 0:

@@ -44,6 +44,8 @@ class AlphaTrader:
                     self.access_token = data["access_token"]
                     self.token_expiry = datetime.now() + timedelta(hours=23)
                     print("✅ KIS 토큰 발급 성공!")
+                    # ★ Worker에 토큰 동기화 (토큰 충돌 방지)
+                    self._sync_token_to_worker(self.access_token)
                     return self.access_token
                 else:
                     err = data.get('error_description', str(data))
@@ -57,6 +59,26 @@ class AlphaTrader:
                 print(f"🚨 KIS 연결 에러: {e}")
                 return None
         return None
+
+    def _sync_token_to_worker(self, token):
+        """발급받은 KIS 토큰을 Cloudflare Worker KV에 동기화합니다."""
+        try:
+            worker_url = os.getenv("WORKER_URL", "")
+            worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+            if not worker_url:
+                return
+            r = requests.post(
+                f"{worker_url}/api/sync-token",
+                headers={"Authorization": f"Bearer {worker_key}", "Content-Type": "application/json"},
+                json={"token": token},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                print("🔄 토큰 Worker 동기화 완료!")
+            else:
+                print(f"⚠️ 토큰 Worker 동기화 실패: HTTP {r.status_code}")
+        except Exception as e:
+            print(f"⚠️ 토큰 Worker 동기화 에러 (무시): {e}")
 
     def _make_headers(self, tr_id):
         """공통 헤더를 생성합니다."""

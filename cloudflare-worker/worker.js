@@ -98,6 +98,44 @@ export default {
       }
     }
 
+    // ✅ 토큰 동기화: GitHub Actions에서 발급한 토큰을 Worker KV에 저장
+    if (url.pathname === "/api/sync-token" && request.method === "POST") {
+      try {
+        const authHeader = request.headers.get("Authorization") || "";
+        if (authHeader !== `Bearer ${env.WORKER_API_KEY || "alpha-internal"}`) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+        }
+
+        const body = await request.json();
+        const { token } = body;
+        if (!token) {
+          return new Response(JSON.stringify({ error: "Missing token" }), { status: 400 });
+        }
+
+        const now = Date.now();
+        // 인메모리 캐시 업데이트
+        _cachedToken = token;
+        _tokenIssuedAt = now;
+
+        // KV에 저장
+        if (env.KV) {
+          await env.KV.put(KV_TOKEN_KEY, JSON.stringify({
+            token: token,
+            issued_at: now,
+          }), { expirationTtl: 86400 });
+        }
+
+        console.log("✅ 토큰 동기화 완료 (Actions → Worker)");
+        return new Response(JSON.stringify({ success: true, synced_at: new Date().toISOString() }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500, headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (url.pathname === "/api/portfolio") {
       try {
         const authHeader = request.headers.get("Authorization") || "";

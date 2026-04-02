@@ -252,13 +252,23 @@ def get_portfolio_section():
         holdings = data.get("holdings", [])
         usd_amt = data.get("buying_power", "0")
         api_error = data.get("api_error", False)
+        error_detail = data.get("error_detail", "")
+
+        # ★ 디버그 로깅 (원인 추적용)
+        print(f"📊 Worker 응답: holdings={len(holdings)}건, buying_power=${usd_amt}, api_error={api_error}")
+        if error_detail:
+            print(f"   상세: {error_detail}")
 
         # ★ Worker API 실패 시 KIS 직접 폴백
+        # 조건: api_error 플래그 OR (보유종목 비어있고 예수금은 있음)
         if api_error or (not holdings and float(usd_amt or "0") > 0):
-            print(f"⚠️ Worker 잔고 조회 실패 (api_error={api_error}), KIS 직접 폴백 시도...")
+            print(f"⚠️ Worker 잔고 조회 이상 (api_error={api_error}, holdings={len(holdings)}), KIS 직접 폴백 시도...")
             fallback = _get_holdings_fallback_kis()
             if fallback:
                 holdings = fallback
+                print(f"✅ KIS 폴백 성공: {len(holdings)}종목 복구")
+            else:
+                print(f"❌ KIS 폴백도 실패 → 보유종목 없음으로 표시됩니다")
 
         # 예수금 $0 폴백: KIS 직접 조회 (GitHub Actions에서 실행 시)
         if float(usd_amt or "0") <= 0:

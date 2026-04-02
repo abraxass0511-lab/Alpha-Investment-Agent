@@ -548,9 +548,47 @@ async function getDeposit(env, _retry = false) {
   return null;
 }
 
-async function sellOrder(env, symbol, qty, price) {
+// === 거래소 자동 감지 (NAS → NYS → AMS 순회) ===
+async function detectExchange(env, symbol) {
+  const token = await getKisToken(env);
+  if (!token) return "NASD";
+
+  const exchanges = [
+    { order: "NASD", price: "NAS" },
+    { order: "NYSE", price: "NYS" },
+    { order: "AMEX", price: "AMS" },
+  ];
+
+  for (const { order, price } of exchanges) {
+    try {
+      const url = `${env.KIS_BASE_URL}/uapi/overseas-price/v1/quotations/price`;
+      const params = new URLSearchParams({ AUTH: "", EXCD: price, SYMB: symbol });
+      const r = await fetch(`${url}?${params}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          appkey: env.KIS_APP_KEY,
+          appsecret: env.KIS_SECRET_KEY,
+          "tr_id": "HHDFS00000300",
+        },
+      });
+      const data = await r.json();
+      if (data.rt_cd === "0" && parseFloat(data.output?.last || "0") > 0) {
+        console.log(`🔍 ${symbol} → ${order} (현재가: $${data.output.last})`);
+        return order;
+      }
+    } catch {}
+  }
+  console.log(`⚠️ ${symbol} 거래소 감지 실패 → NASD 기본값`);
+  return "NASD";
+}
+
+async function sellOrder(env, symbol, qty, price, exchange = null) {
   const token = await getKisToken(env);
   if (!token) return false;
+
+  // 거래소 자동 감지
+  if (!exchange) exchange = await detectExchange(env, symbol);
 
   const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/order`;
   const r = await fetch(url, {
@@ -565,7 +603,7 @@ async function sellOrder(env, symbol, qty, price) {
     body: JSON.stringify({
       CANO: env.KIS_CANO,
       ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
-      OVRS_EXCG_CD: "NASD",
+      OVRS_EXCG_CD: exchange,
       PDNO: symbol,
       ORD_QTY: String(qty),
       OVRS_ORD_UNPR: String(price),
@@ -575,12 +613,18 @@ async function sellOrder(env, symbol, qty, price) {
   });
 
   const data = await r.json();
+  if (data.rt_cd !== "0") {
+    console.log(`❌ 매도 실패 ${symbol}@${exchange}: ${data.msg1 || JSON.stringify(data)}`);
+  }
   return data.rt_cd === "0";
 }
 
-async function buyOrder(env, symbol, qty, price) {
+async function buyOrder(env, symbol, qty, price, exchange = null) {
   const token = await getKisToken(env);
   if (!token) return false;
+
+  // 거래소 자동 감지
+  if (!exchange) exchange = await detectExchange(env, symbol);
 
   const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/order`;
   const r = await fetch(url, {
@@ -595,7 +639,7 @@ async function buyOrder(env, symbol, qty, price) {
     body: JSON.stringify({
       CANO: env.KIS_CANO,
       ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
-      OVRS_EXCG_CD: "NASD",
+      OVRS_EXCG_CD: exchange,
       PDNO: symbol,
       ORD_QTY: String(qty),
       OVRS_ORD_UNPR: String(price),
@@ -605,6 +649,9 @@ async function buyOrder(env, symbol, qty, price) {
   });
 
   const data = await r.json();
+  if (data.rt_cd !== "0") {
+    console.log(`❌ 매수 실패 ${symbol}@${exchange}: ${data.msg1 || JSON.stringify(data)}`);
+  }
   return data.rt_cd === "0";
 }
 
@@ -720,6 +767,17 @@ async function executeApproval(env) {
       const heldSymbols = (holdings || []).filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0).map(h => h.ovrs_pdno);
       buyStocks = buyStocks.filter(s => !heldSymbols.includes(s.symbol));
 
+      // ★ MAX_PORTFOLIO=5 제한: 보유 유지 종목 + 매수 종목 합산 5개까지만
+      const MAX_PORTFOLIO = 5;
+      const currentHeld = heldSymbols.length;
+      const sellCount = sellStocks.length;
+      const remainingHeld = Math.max(0, currentHeld - sellCount);
+      const availableSlots = Math.max(0, MAX_PORTFOLIO - remainingHeld);
+      if (buyStocks.length > availableSlots) {
+        console.log(`⚠️ 매수 후보 ${buyStocks.length}개 → ${availableSlots}개로 제한 (보유유지 ${remainingHeld}종목)`);
+        buyStocks = buyStocks.slice(0, availableSlots);
+      }
+
       if (buyStocks.length === 0) {
         buyMsg += "\u2139\ufe0f \ubaa8\ub4e0 \ucd94\ucc9c \uc885\ubaa9\uc744 \uc774\ubbf8 \ubcf4\uc720 \uc911\uc785\ub2c8\ub2e4.\n\n";
       } else {
@@ -740,7 +798,9 @@ async function executeApproval(env) {
               buyMsg += `  \u26a0\ufe0f ${s.symbol}: \ub2e8\uac00 $${s.price.toFixed(2)} > \ud22c\uc790\uae08\n`;
               continue;
             }
-            const ok = await buyOrder(env, s.symbol, qty, s.price.toFixed(2));
+            // 거래소 자동 감지 후 매수
+            const exchange = await detectExchange(env, s.symbol);
+            const ok = await buyOrder(env, s.symbol, qty, s.price.toFixed(2), exchange);
             buyMsg += ok
               ? `  \u2705 ${s.symbol} ${qty}\uc8fc \u00d7 $${s.price.toFixed(2)} \ub9e4\uc218 \uc8fc\ubb38 \uc811\uc218\n`
               : `  \u274c ${s.symbol} \ub9e4\uc218 \uc2e4\ud328\n`;
@@ -1050,7 +1110,9 @@ async function executeEmergencySell(env) {
       const cur = parseFloat(h.now_pric2 || "0");
       const sellPrice = (cur * 0.995).toFixed(2);
 
-      const success = await sellOrder(env, sym, qty, sellPrice);
+      // 거래소 자동 감지 후 매도
+      const exchange = await detectExchange(env, sym);
+      const success = await sellOrder(env, sym, qty, sellPrice, exchange);
       const status = success ? "\u2705 \uc644\ub8cc" : "\u274c \uc2e4\ud328";
       msg += "  " + status + " *" + sym + "* " + qty + "\uc8fc \u00d7 $" + sellPrice + "\n";
     }

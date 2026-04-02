@@ -606,9 +606,9 @@ async function sellOrder(env, symbol, qty, price, exchange = null) {
       OVRS_EXCG_CD: exchange,
       PDNO: symbol,
       ORD_QTY: String(qty),
-      OVRS_ORD_UNPR: String(price),
+      OVRS_ORD_UNPR: "0",
       ORD_SVR_DVSN_CD: "0",
-      ORD_DVSN: "00",
+      ORD_DVSN: "01",
     }),
   });
 
@@ -642,9 +642,9 @@ async function buyOrder(env, symbol, qty, price, exchange = null) {
       OVRS_EXCG_CD: exchange,
       PDNO: symbol,
       ORD_QTY: String(qty),
-      OVRS_ORD_UNPR: String(price),
+      OVRS_ORD_UNPR: "0",
       ORD_SVR_DVSN_CD: "0",
-      ORD_DVSN: "00",
+      ORD_DVSN: "01",
     }),
   });
 

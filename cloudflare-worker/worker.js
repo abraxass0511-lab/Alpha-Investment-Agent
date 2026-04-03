@@ -932,9 +932,21 @@ async function handleApproval(env) {
     // Market open -> execute immediately
     const result = await executeApproval(env);
     if (typeof result === "string") return result;
-    // KV에 체결 확인 대상 저장 → 5분 간격 cron이 확인
-    await saveFillCheckToKV(env, result.orderedSymbols);
-    return result.msg;
+    if (result.successCount > 0) {
+      // 1건이라도 성공 → 체결 확인 대상 저장
+      await saveFillCheckToKV(env, result.orderedSymbols);
+      return result.msg;
+    } else {
+      // 전부 실패 → KV에 저장하여 5분 뒤 cron 재시도
+      if (env.KV) {
+        await env.KV.put("pending_approval", JSON.stringify({
+          type: "approval",
+          requested_at: new Date().toISOString(),
+          retry_count: 1,
+        }));
+      }
+      return result.msg + "\n\n\u26a0\ufe0f \uc804\ubd80 \uc2e4\ud328. 5\ubd84 \ud6c4 \uc790\ub3d9 \uc7ac\uc2dc\ub3c4\ud569\ub2c8\ub2e4.";
+    }
   } else {
     // Market closed -> save reservation to KV
     if (env.KV) {

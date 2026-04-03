@@ -229,109 +229,110 @@ export default {
   // Cron Trigger: market open + 체결 확인 폴링
   async scheduled(event, env, ctx) {
     try {
-      if (!isTradingDay(new Date())) return;
+      const isTradingDayNow = isTradingDay(new Date());
 
-      // === A. 체결 확인 폴링 (5분 간격 cron에서 실행) ===
-      const fillPend = await env.KV.get("pending_fill_check");
-      if (fillPend) {
-        const fillData = JSON.parse(fillPend);
-        const etHour = getETHour();
+      // === A. 체결 확인 폴링 (거래일에만 실행) ===
+      if (isTradingDayNow) {
+        const fillPend = await env.KV.get("pending_fill_check");
+        if (fillPend) {
+          const fillData = JSON.parse(fillPend);
+          const etHour = getETHour();
 
-        // 체결 내역 조회 (장 마감 시에도 최종 확인 실행)
-        const orders = await checkOrderFills(env);
+          const orders = await checkOrderFills(env);
 
-        // API 호출 실패 시 에러 알림 (조용히 넘기지 않음)
-        if (!orders) {
-          // 장 마감이면 정리하면서 실패 알림
-          if (etHour >= 16 && etHour < 21) {
-            await sendMessage(env, "\u26a0\ufe0f *[\uccb4\uacb0 \ud655\uc778 \uc2e4\ud328]*\n\n\uc7a5 \ub9c8\uac10\uae4c\uc9c0 \uccb4\uacb0 \ub0b4\uc5ed \uc870\ud68c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\nKIS API \uc751\ub2f5 \uc624\ub958\uc785\ub2c8\ub2e4, \ub300\ud45c\ub2d8.\n\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \uccb4\uacb0 \uc5ec\ubd80\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.", REPLY_KEYBOARD);
-            await env.KV.delete("pending_fill_check");
-          }
-          // 장 중이면 → fill check만 스킵, 아래 예약 주문은 계속 실행
-        } else {
-          const symbols = fillData.symbols || [];
-          let filledAll = true;
-          let msg = "\ud83d\udcca *[\uccb4\uacb0 \uc54c\ub9bc]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
-          let filledCount = 0;
+          if (!orders) {
+            if (etHour >= 16 && etHour < 21) {
+              await sendMessage(env, "\u26a0\ufe0f *[\uccb4\uacb0 \ud655\uc778 \uc2e4\ud328]*\n\n\uc7a5 \ub9c8\uac10\uae4c\uc9c0 \uccb4\uacb0 \ub0b4\uc5ed \uc870\ud68c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\nKIS API \uc751\ub2f5 \uc624\ub958\uc785\ub2c8\ub2e4, \ub300\ud45c\ub2d8.\n\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \uccb4\uacb0 \uc5ec\ubd80\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.", REPLY_KEYBOARD);
+              await env.KV.delete("pending_fill_check");
+            }
+          } else {
+            const symbols = fillData.symbols || [];
+            let filledAll = true;
+            let msg = "\ud83d\udcca *[\uccb4\uacb0 \uc54c\ub9bc]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+            let filledCount = 0;
 
-          if (orders.length > 0) {
-            for (const ord of orders) {
-              const sym = ord.pdno || ord.ovrs_pdno || "?";
-              if (symbols.length > 0 && !symbols.includes(sym)) continue;
+            if (orders.length > 0) {
+              for (const ord of orders) {
+                const sym = ord.pdno || ord.ovrs_pdno || "?";
+                if (symbols.length > 0 && !symbols.includes(sym)) continue;
 
-              const side = ord.sll_buy_dvsn_cd === "02" ? "\ub9e4\uc218" : "\ub9e4\ub3c4";
-              const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
-              const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
-              const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
+                const side = ord.sll_buy_dvsn_cd === "02" ? "\ub9e4\uc218" : "\ub9e4\ub3c4";
+                const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
+                const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
+                const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
 
-              if (fillQty > 0) {
-                filledCount++;
-                const emoji = side === "\ub9e4\uc218" ? "\u2705" : "\ud83d\udd3b";
-                msg += `${emoji} *${sym}* ${side} \uccb4\uacb0 \uc644\ub8cc!\n`;
-                msg += `   \ud83d\udcca ${fillQty}\uc8fc \u00d7 $${parseFloat(fillPrice).toFixed(2)}\n\n`;
+                if (fillQty > 0) {
+                  filledCount++;
+                  const emoji = side === "\ub9e4\uc218" ? "\u2705" : "\ud83d\udd3b";
+                  msg += `${emoji} *${sym}* ${side} \uccb4\uacb0 \uc644\ub8cc!\n`;
+                  msg += `   \ud83d\udcca ${fillQty}\uc8fc \u00d7 $${parseFloat(fillPrice).toFixed(2)}\n\n`;
+                } else {
+                  filledAll = false;
+                }
+              }
+            }
+
+            if (filledCount > 0 && filledAll) {
+              await sendMessage(env, msg, REPLY_KEYBOARD);
+              await env.KV.delete("pending_fill_check");
+            } else if (filledCount > 0 && !filledAll) {
+              msg += "_\ub098\uba38\uc9c0 \uc885\ubaa9 \uccb4\uacb0 \ub300\uae30 \uc911..._";
+              await sendMessage(env, msg, REPLY_KEYBOARD);
+            } else if (etHour >= 16 && etHour < 21) {
+              let closeMsg = "\ud83d\udd52 *[\uc7a5 \ub9c8\uac10 \uccb4\uacb0 \ud655\uc778]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
+              if (orders.length === 0) {
+                closeMsg += "\u26a0\ufe0f \uc624\ub298 \uc8fc\ubb38 \ub0b4\uc5ed\uc774 \uc870\ud68c\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.\n";
               } else {
-                filledAll = false;
+                closeMsg += "\u26a0\ufe0f \uccb4\uacb0 \uac10\uc9c0\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\n";
+                closeMsg += `\ud83d\udcdd \uc870\ud68c\ub41c \uc8fc\ubb38: ${orders.length}\uac74\n`;
+                if (orders[0]) {
+                  const keys = Object.keys(orders[0]).join(", ");
+                  closeMsg += `\ud83d\udd0d \uc751\ub2f5 \ud544\ub4dc: _${keys.substring(0, 200)}_\n`;
+                }
               }
+              closeMsg += "\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \ud655\uc778\ud574 \uc8fc\uc138\uc694, \ub300\ud45c\ub2d8.";
+              await sendMessage(env, closeMsg, REPLY_KEYBOARD);
+              await env.KV.delete("pending_fill_check");
             }
           }
-
-          if (filledCount > 0 && filledAll) {
-            // 전부 체결 → 알림 보내고 KV 삭제
-            await sendMessage(env, msg, REPLY_KEYBOARD);
-            await env.KV.delete("pending_fill_check");
-          } else if (filledCount > 0 && !filledAll) {
-            // 일부만 체결 → 체결된 것 알리고 계속 대기
-            msg += "_\ub098\uba38\uc9c0 \uc885\ubaa9 \uccb4\uacb0 \ub300\uae30 \uc911..._";
-            await sendMessage(env, msg, REPLY_KEYBOARD);
-          } else if (etHour >= 16 && etHour < 21) {
-            // 장 마감인데 체결 감지 못함 → 최종 알림 후 정리
-            let closeMsg = "\ud83d\udd52 *[\uc7a5 \ub9c8\uac10 \uccb4\uacb0 \ud655\uc778]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
-            if (orders.length === 0) {
-              closeMsg += "\u26a0\ufe0f \uc624\ub298 \uc8fc\ubb38 \ub0b4\uc5ed\uc774 \uc870\ud68c\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.\n";
-            } else {
-              closeMsg += "\u26a0\ufe0f \uccb4\uacb0 \uac10\uc9c0\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\n";
-              closeMsg += `\ud83d\udcdd \uc870\ud68c\ub41c \uc8fc\ubb38: ${orders.length}\uac74\n`;
-              if (orders[0]) {
-                const keys = Object.keys(orders[0]).join(", ");
-                closeMsg += `\ud83d\udd0d \uc751\ub2f5 \ud544\ub4dc: _${keys.substring(0, 200)}_\n`;
-              }
-            }
-            closeMsg += "\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \ud655\uc778\ud574 \uc8fc\uc138\uc694, \ub300\ud45c\ub2d8.";
-            await sendMessage(env, closeMsg, REPLY_KEYBOARD);
-            await env.KV.delete("pending_fill_check");
-          }
-          // 장 중 + filledCount === 0 → 다음 cron에서 재시도 (fill check만)
         }
       }
 
-      // === B. 예약 주문 실행 (항상 독립적으로 체크) ===
+      // === B. 예약 주문 실행 (휴장일 여부와 무관하게 항상 실행) ===
+      // 예약 주문은 장이 열려 있을 때만 실행 (isMarketOpen 체크)
+      // 장이 닫혀 있으면 다음 cron에서 재시도
 
       // 1. 긴급 전량 매도 예약 실행
       const sellPend = await env.KV.get("pending_sell");
       if (sellPend) {
-        const data = JSON.parse(sellPend);
-        if (data.type === "sell_all") {
-          const result = await executeEmergencySell(env);
-          await sendMessage(env, "\u23f0 *[\uc608\uc57d \ub9e4\ub3c4 \uc2e4\ud589]*\n\n" + result, REPLY_KEYBOARD);
+        if (isMarketOpen()) {
+          const data = JSON.parse(sellPend);
+          if (data.type === "sell_all") {
+            const result = await executeEmergencySell(env);
+            await sendMessage(env, "\u23f0 *[\uc608\uc57d \ub9e4\ub3c4 \uc2e4\ud589]*\n\n" + result, REPLY_KEYBOARD);
+          }
+          await env.KV.delete("pending_sell");
         }
-        await env.KV.delete("pending_sell");
+        // 장 닫혀 있으면 KV 유지 → 다음 cron에서 재시도
       }
 
       // 2. 포트폴리오 승인 매수/매도 예약 실행
       const appPend = await env.KV.get("pending_approval");
       if (appPend) {
-        const data = JSON.parse(appPend);
-        if (data.type === "approval") {
-          const result = await executeApproval(env);
-          if (typeof result === "string") {
-            await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778]*\n\n" + result, REPLY_KEYBOARD);
-          } else {
-            await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778 \u2192 \uc8fc\ubb38 \uc811\uc218]*\n\n" + result.msg, REPLY_KEYBOARD);
-            // KV에 체결 확인 대상 저장 → 5분 간격 cron이 확인
-            await saveFillCheckToKV(env, result.orderedSymbols);
+        if (isMarketOpen()) {
+          const data = JSON.parse(appPend);
+          if (data.type === "approval") {
+            const result = await executeApproval(env);
+            if (typeof result === "string") {
+              await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778]*\n\n" + result, REPLY_KEYBOARD);
+            } else {
+              await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778 \u2192 \uc8fc\ubb38 \uc811\uc218]*\n\n" + result.msg, REPLY_KEYBOARD);
+              await saveFillCheckToKV(env, result.orderedSymbols);
+            }
           }
+          await env.KV.delete("pending_approval");
         }
-        await env.KV.delete("pending_approval");
+        // 장 닫혀 있으면 KV 유지 → 다음 cron에서 재시도
       }
     } catch (e) {
       await sendMessage(env, "\u26a0\ufe0f \uc608\uc57d \uc2e4\ud589 \uc911 \uc5d0\ub7ec: " + e.message, REPLY_KEYBOARD);
@@ -636,76 +637,93 @@ async function detectExchange(env, symbol) {
   return "NASD";
 }
 
-async function sellOrder(env, symbol, qty, price, exchange = null) {
-  const token = await getKisToken(env);
-  if (!token) return false;
+// === 주문 재시도 유틸리티 (최대 3회, Exponential Backoff) ===
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-  // 거래소 자동 감지
-  if (!exchange) exchange = await detectExchange(env, symbol);
+async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, maxRetries = 3) {
+  const side = trId === "VTTT1002U" ? "매수" : "매도";
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const token = await getKisToken(env, attempt > 1); // 재시도 시 토큰 강제 갱신
+      if (!token) {
+        console.log(`❌ ${side} 실패 ${symbol}: 토큰 발급 실패 (시도 ${attempt}/${maxRetries})`);
+        if (attempt < maxRetries) {
+          await sleep(1000 * Math.pow(2, attempt - 1)); // 1s, 2s, 4s
+          continue;
+        }
+        return { success: false, error: "토큰 발급 실패" };
+      }
 
-  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/order`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      appkey: env.KIS_APP_KEY,
-      appsecret: env.KIS_SECRET_KEY,
-      "tr_id": "VTTT1006U",
-    },
-    body: JSON.stringify({
-      CANO: env.KIS_CANO,
-      ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
-      OVRS_EXCG_CD: exchange,
-      PDNO: symbol,
-      ORD_QTY: String(qty),
-      OVRS_ORD_UNPR: "0",
-      ORD_SVR_DVSN_CD: "0",
-      ORD_DVSN: "01",
-    }),
-  });
+      const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/order`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          appkey: env.KIS_APP_KEY,
+          appsecret: env.KIS_SECRET_KEY,
+          "tr_id": trId,
+        },
+        body: JSON.stringify({
+          CANO: env.KIS_CANO,
+          ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+          OVRS_EXCG_CD: exchange,
+          PDNO: symbol,
+          ORD_QTY: String(qty),
+          OVRS_ORD_UNPR: "0",
+          ORD_SVR_DVSN_CD: "0",
+          ORD_DVSN: "01",
+        }),
+      });
 
-  const data = await r.json();
-  if (data.rt_cd !== "0") {
-    console.log(`❌ 매도 실패 ${symbol}@${exchange}: ${data.msg1 || JSON.stringify(data)}`);
+      const data = await r.json();
+      
+      if (data.rt_cd === "0") {
+        if (attempt > 1) {
+          console.log(`✅ ${side} 성공 ${symbol}@${exchange} (재시도 ${attempt}회만에 성공)`);
+        }
+        return { success: true };
+      }
+
+      const errMsg = data.msg1 || JSON.stringify(data);
+      console.log(`❌ ${side} 실패 ${symbol}@${exchange} (시도 ${attempt}/${maxRetries}): ${errMsg}`);
+
+      // 재시도 불가능한 에러 (잔고 부족, 종목 코드 오류 등)는 즉시 중단
+      const noRetryKeywords = ["잔고", "수량", "종목", "거래정지", "매매불가"];
+      if (noRetryKeywords.some(kw => errMsg.includes(kw))) {
+        return { success: false, error: errMsg };
+      }
+
+      if (attempt < maxRetries) {
+        await sleep(1000 * Math.pow(2, attempt - 1)); // 1s, 2s
+      } else {
+        return { success: false, error: errMsg };
+      }
+    } catch (e) {
+      console.log(`❌ ${side} 예외 ${symbol} (시도 ${attempt}/${maxRetries}): ${e.message}`);
+      if (attempt < maxRetries) {
+        await sleep(1000 * Math.pow(2, attempt - 1));
+      } else {
+        return { success: false, error: e.message };
+      }
+    }
   }
-  return data.rt_cd === "0";
+  return { success: false, error: "알 수 없는 오류" };
+}
+
+async function sellOrder(env, symbol, qty, price, exchange = null) {
+  if (!exchange) exchange = await detectExchange(env, symbol);
+  const result = await executeOrderWithRetry(env, "VTTT1006U", symbol, qty, price, exchange);
+  return result.success;
 }
 
 async function buyOrder(env, symbol, qty, price, exchange = null) {
-  const token = await getKisToken(env);
-  if (!token) return false;
-
-  // 거래소 자동 감지
   if (!exchange) exchange = await detectExchange(env, symbol);
-
-  const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/order`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      appkey: env.KIS_APP_KEY,
-      appsecret: env.KIS_SECRET_KEY,
-      "tr_id": "VTTT1002U",
-    },
-    body: JSON.stringify({
-      CANO: env.KIS_CANO,
-      ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
-      OVRS_EXCG_CD: exchange,
-      PDNO: symbol,
-      ORD_QTY: String(qty),
-      OVRS_ORD_UNPR: "0",
-      ORD_SVR_DVSN_CD: "0",
-      ORD_DVSN: "01",
-    }),
-  });
-
-  const data = await r.json();
-  if (data.rt_cd !== "0") {
-    console.log(`❌ 매수 실패 ${symbol}@${exchange}: ${data.msg1 || JSON.stringify(data)}`);
-  }
-  return data.rt_cd === "0";
+  const result = await executeOrderWithRetry(env, "VTTT1002U", symbol, qty, price, exchange);
+  return result.success;
 }
 
 // === 체결 확인 함수 (KIS 주문체결내역 조회) ===
@@ -1059,8 +1077,11 @@ async function handleEmergencySell(env) {
   );
 }
 
+// NYSE/NASDAQ 공식 휴장일 (verified)
+// 2026: New Year, MLK, Presidents, Memorial, Juneteenth, Independence(observed), Labor, Thanksgiving, Christmas
+// 2027: New Year, MLK, Presidents, Good Friday, Memorial, Juneteenth(observed), Independence(observed), Labor, Thanksgiving, Christmas(observed)
 const US_HOLIDAYS = [
-  "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25",
+  "2026-01-01", "2026-01-19", "2026-02-16", "2026-05-25",
   "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
   "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31",
   "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24"

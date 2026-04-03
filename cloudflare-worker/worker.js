@@ -1104,15 +1104,21 @@ function getETHour() {
 }
 
 function isTradingDay(dateObj) {
-  const utcDay = dateObj.getUTCDay();
-  // 0: 일요일, 6: 토요일
-  if (utcDay === 0 || utcDay === 6) return false;
-  
-  // yyyy-mm-dd 포맷으로 공휴일 검사
-  const ymd = dateObj.toISOString().split("T")[0];
-  if (US_HOLIDAYS.includes(ymd)) return false;
-
-  return true;
+  // US Eastern Time 기준으로 요일/날짜 판단 (UTC가 아님!)
+  try {
+    const etDate = dateObj.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // yyyy-mm-dd
+    const etDay = new Date(etDate + "T12:00:00").getDay(); // 0=일, 6=토
+    if (etDay === 0 || etDay === 6) return false;
+    if (US_HOLIDAYS.includes(etDate)) return false;
+    return true;
+  } catch {
+    // Intl 미지원 폴백: UTC 기준 (기존 로직)
+    const utcDay = dateObj.getUTCDay();
+    if (utcDay === 0 || utcDay === 6) return false;
+    const ymd = dateObj.toISOString().split("T")[0];
+    if (US_HOLIDAYS.includes(ymd)) return false;
+    return true;
+  }
 }
 
 function isMarketOpen() {

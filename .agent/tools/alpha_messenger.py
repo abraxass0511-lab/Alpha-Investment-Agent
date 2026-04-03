@@ -608,7 +608,7 @@ def report_daily_picks():
     # 휴장 안내 (금요일 → 주말 안내, 공휴일 전날 → 공휴일 안내)
     try:
         from us_market_calendar import generate_closure_notice
-        closure_notice = generate_closure_notice()
+        closure_notice = generate_closure_notice(data_date)
         if closure_notice:
             footer += closure_notice
     except Exception as e:

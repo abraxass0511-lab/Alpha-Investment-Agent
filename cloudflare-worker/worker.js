@@ -204,8 +204,8 @@ export default {
           return new Response(JSON.stringify({ error: "Missing symbol/qty/price" }), { status: 400 });
         }
 
-        const success = await sellOrder(env, symbol, parseInt(qty), String(price));
-        return new Response(JSON.stringify({ success, symbol, qty, price }), {
+        const result = await sellOrder(env, symbol, parseInt(qty), String(price));
+        return new Response(JSON.stringify({ success: result.success, error: result.error || null, symbol, qty, price }), {
           headers: { "Content-Type": "application/json" },
         });
       } catch (e) {
@@ -1182,7 +1182,20 @@ function isMarketOpen() {
 
 async function handleSellConfirm(env) {
   if (isMarketOpen()) {
-    return (await executeEmergencySell(env)).msg;
+    const result = await executeEmergencySell(env);
+    if (!result.allFailed) {
+      return result.msg;
+    } else {
+      // 전부 실패 → KV에 저장하여 5분 뒤 cron 재시도
+      if (env.KV) {
+        await env.KV.put("pending_sell", JSON.stringify({
+          type: "sell_all",
+          requested_at: new Date().toISOString(),
+          retry_count: 1,
+        }));
+      }
+      return result.msg + "\n\n\u26a0\ufe0f \uc804\ubd80 \uc2e4\ud328. 5\ubd84 \ud6c4 \uc790\ub3d9 \uc7ac\uc2dc\ub3c4\ud569\ub2c8\ub2e4.";
+    }
   } else {
     // Market closed -> save reservation to KV
     if (env.KV) {

@@ -309,9 +309,21 @@ export default {
           const data = JSON.parse(sellPend);
           if (data.type === "sell_all") {
             const result = await executeEmergencySell(env);
-            await sendMessage(env, "\u23f0 *[\uc608\uc57d \ub9e4\ub3c4 \uc2e4\ud589]*\n\n" + result, REPLY_KEYBOARD);
+            await sendMessage(env, "\u23f0 *[\uc608\uc57d \ub9e4\ub3c4 \uc2e4\ud589]*\n\n" + result.msg, REPLY_KEYBOARD);
+            if (!result.allFailed) {
+              await env.KV.delete("pending_sell");
+            } else {
+              const retryCount = (data.retry_count || 0) + 1;
+              if (retryCount >= 6) {
+                await env.KV.delete("pending_sell");
+                await sendMessage(env, "\u26a0\ufe0f \ub9e4\ub3c4 \uc608\uc57d 6\ud68c \uc5f0\uc18d \uc2e4\ud328. \uc790\ub3d9 \ucde8\uc18c.", REPLY_KEYBOARD);
+              } else {
+                await env.KV.put("pending_sell", JSON.stringify({ ...data, retry_count: retryCount }));
+              }
+            }
+          } else {
+            await env.KV.delete("pending_sell");
           }
-          await env.KV.delete("pending_sell");
         }
         // 장 닫혀 있으면 KV 유지 → 다음 cron에서 재시도
       }
@@ -325,12 +337,30 @@ export default {
             const result = await executeApproval(env);
             if (typeof result === "string") {
               await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778]*\n\n" + result, REPLY_KEYBOARD);
-            } else {
+              const retryCount = (data.retry_count || 0) + 1;
+              if (retryCount >= 6) {
+                await env.KV.delete("pending_approval");
+                await sendMessage(env, "\u26a0\ufe0f \uc2b9\uc778 \uc608\uc57d 6\ud68c \uc5f0\uc18d \uc2e4\ud328. \uc790\ub3d9 \ucde8\uc18c.", REPLY_KEYBOARD);
+              } else {
+                await env.KV.put("pending_approval", JSON.stringify({ ...data, retry_count: retryCount }));
+              }
+            } else if (result.successCount > 0) {
               await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778 \u2192 \uc8fc\ubb38 \uc811\uc218]*\n\n" + result.msg, REPLY_KEYBOARD);
               await saveFillCheckToKV(env, result.orderedSymbols);
+              await env.KV.delete("pending_approval");
+            } else {
+              await sendMessage(env, "\u23f0 *[\uc608\uc57d \uc2b9\uc778]*\n\n" + result.msg + "\n\u26a0\ufe0f \uc804\ubd80 \uc2e4\ud328. \ub2e4\uc74c cron\uc5d0\uc11c \uc7ac\uc2dc\ub3c4.", REPLY_KEYBOARD);
+              const retryCount = (data.retry_count || 0) + 1;
+              if (retryCount >= 6) {
+                await env.KV.delete("pending_approval");
+                await sendMessage(env, "\u26a0\ufe0f \uc2b9\uc778 \uc608\uc57d 6\ud68c \uc5f0\uc18d \uc2e4\ud328. \uc790\ub3d9 \ucde8\uc18c.", REPLY_KEYBOARD);
+              } else {
+                await env.KV.put("pending_approval", JSON.stringify({ ...data, retry_count: retryCount }));
+              }
             }
+          } else {
+            await env.KV.delete("pending_approval");
           }
-          await env.KV.delete("pending_approval");
         }
         // 장 닫혀 있으면 KV 유지 → 다음 cron에서 재시도
       }
@@ -716,14 +746,12 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
 
 async function sellOrder(env, symbol, qty, price, exchange = null) {
   if (!exchange) exchange = await detectExchange(env, symbol);
-  const result = await executeOrderWithRetry(env, "VTTT1006U", symbol, qty, price, exchange);
-  return result.success;
+  return await executeOrderWithRetry(env, "VTTT1006U", symbol, qty, price, exchange);
 }
 
 async function buyOrder(env, symbol, qty, price, exchange = null) {
   if (!exchange) exchange = await detectExchange(env, symbol);
-  const result = await executeOrderWithRetry(env, "VTTT1002U", symbol, qty, price, exchange);
-  return result.success;
+  return await executeOrderWithRetry(env, "VTTT1002U", symbol, qty, price, exchange);
 }
 
 // === 체결 확인 함수 (KIS 주문체결내역 조회) ===
@@ -819,15 +847,17 @@ async function executeApproval(env) {
     let msg = "\ud83c\udfaf *\uc2b9\uc778 \ucc98\ub9ac \uacb0\uacfc*\n\n";
     let buyMsg = "";
     let sellMsg = "";
+    let successCount = 0;
 
     // \ub9e4\ub3c4 \uba3c\uc800 \uc2e4\ud589 (\uc608\uc218\uae08 \ud655\ubcf4)
     if (sellStocks.length > 0) {
       sellMsg += "\ud83d\udd34 *\ub9e4\ub3c4:*\n";
       for (const s of sellStocks) {
-        const ok = await sellOrder(env, s.symbol, s.qty, s.current);
-        sellMsg += ok
+        const res = await sellOrder(env, s.symbol, s.qty, s.current);
+        if (res.success) successCount++;
+        sellMsg += res.success
           ? `  \u2705 ${s.symbol} ${s.qty}\uc8fc \u00d7 $${s.current.toFixed(2)} \ub9e4\ub3c4 \uc8fc\ubb38 \uc811\uc218\n`
-          : `  \u274c ${s.symbol} \ub9e4\ub3c4 \uc2e4\ud328\n`;
+          : `  \u274c ${s.symbol} \ub9e4\ub3c4 \uc2e4\ud328: ${res.error}\n`;
       }
       sellMsg += "\n";
     }
@@ -871,10 +901,11 @@ async function executeApproval(env) {
             }
             // 거래소 자동 감지 후 매수
             const exchange = await detectExchange(env, s.symbol);
-            const ok = await buyOrder(env, s.symbol, qty, s.price.toFixed(2), exchange);
-            buyMsg += ok
+            const res = await buyOrder(env, s.symbol, qty, s.price.toFixed(2), exchange);
+            if (res.success) successCount++;
+            buyMsg += res.success
               ? `  \u2705 ${s.symbol} ${qty}\uc8fc \u00d7 $${s.price.toFixed(2)} \ub9e4\uc218 \uc8fc\ubb38 \uc811\uc218\n`
-              : `  \u274c ${s.symbol} \ub9e4\uc218 \uc2e4\ud328\n`;
+              : `  \u274c ${s.symbol} \ub9e4\uc218 \uc2e4\ud328: ${res.error}\n`;
           }
           buyMsg += "\n";
         }
@@ -890,7 +921,7 @@ async function executeApproval(env) {
       ...buyStocks.map(s => s.symbol),
     ];
 
-    return { msg, orderedSymbols };
+    return { msg, orderedSymbols, successCount };
   } catch (e) {
     return "\u26a0\ufe0f \uc2b9\uc778 \ucc98\ub9ac \uc5d0\ub7ec: " + e.message;
   }
@@ -1139,8 +1170,7 @@ function isMarketOpen() {
 
 async function handleSellConfirm(env) {
   if (isMarketOpen()) {
-    // Market open -> sell immediately
-    return await executeEmergencySell(env);
+    return (await executeEmergencySell(env)).msg;
   } else {
     // Market closed -> save reservation to KV
     if (env.KV) {
@@ -1178,12 +1208,13 @@ async function executeEmergencySell(env) {
   try {
     const holdings = await getBalance(env);
     if (!holdings || holdings.length === 0)
-      return "\ud83d\udced \ubcf4\uc720 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \uc774\ubbf8 \ud604\uae08 100% \uc0c1\ud0dc\uc785\ub2c8\ub2e4.";
+      return { msg: "\ud83d\udced \ubcf4\uc720 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4. \uc774\ubbf8 \ud604\uae08 100% \uc0c1\ud0dc\uc785\ub2c8\ub2e4.", allFailed: false };
 
     const active = holdings.filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0);
-    if (active.length === 0) return "\ud83d\udced \ubcf4\uc720 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.";
+    if (active.length === 0) return { msg: "\ud83d\udced \ubcf4\uc720 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.", allFailed: false };
 
     let msg = "\ud83d\uded1 *[\uc804\ub7c9 \ub9e4\ub3c4 \uc2e4\ud589]*\n\n";
+    let sellOk = 0;
     for (const h of active) {
       const sym = h.ovrs_pdno || "?";
       const qty = parseInt(h.ovrs_cblc_qty || "0");
@@ -1192,14 +1223,15 @@ async function executeEmergencySell(env) {
 
       // 거래소 자동 감지 후 매도
       const exchange = await detectExchange(env, sym);
-      const success = await sellOrder(env, sym, qty, sellPrice, exchange);
-      const status = success ? "\u2705 \uc644\ub8cc" : "\u274c \uc2e4\ud328";
+      const res = await sellOrder(env, sym, qty, sellPrice, exchange);
+      if (res.success) sellOk++;
+      const status = res.success ? "\u2705 \uc644\ub8cc" : "\u274c \uc2e4\ud328";
       msg += "  " + status + " *" + sym + "* " + qty + "\uc8fc \u00d7 $" + sellPrice + "\n";
     }
     msg += "\n\ud83d\udee1\ufe0f \ub9e4\ub3c4 \ucc98\ub9ac\uac00 \uc644\ub8cc\ub418\uc5c8\uc2b5\ub2c8\ub2e4, \ub300\ud45c\ub2d8.";
-    return msg;
+    return { msg, allFailed: sellOk === 0 && active.length > 0 };
   } catch (e) {
-    return "\u26a0\ufe0f \ub9e4\ub3c4 \uc5d0\ub7ec: " + e.message;
+    return { msg: "\u26a0\ufe0f \ub9e4\ub3c4 \uc5d0\ub7ec: " + e.message, allFailed: true };
   }
 }
 
@@ -1328,7 +1360,7 @@ async function handleUpdate(update, env) {
     return;
   }
 
-  if (text === "\\ubc18\\ub824") {
+  if (text === "\ubc18\ub824") {
     const response = await handleReject(env);
     await sendMessage(env, response, REPLY_KEYBOARD);
     return;

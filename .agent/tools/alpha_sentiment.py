@@ -36,17 +36,33 @@ def calculate_12_1_momentum(symbol):
     12개월 전 대비 1개월 전 가격 변동률.
     최근 1개월을 제외하여 단기 노이즈를 배제.
     
+    ★ 각 소스별 최대 3회 재시도 + 지수 백오프
     Returns: float (성공 시) 또는 None (API 실패 시)
     """
-    # 1차: Finnhub Candle API (Primary)
+    MAX_RETRIES = 3
+    
+    # ═══ 1차: Finnhub Candle API (Primary) ═══
     FKEY = os.getenv("FINNHUB_API_KEY")
     if FKEY:
-        try:
-            now = int(time.time())
-            one_year_ago = now - (365 * 24 * 60 * 60)
-            url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}&resolution=D&from={one_year_ago}&to={now}&token={FKEY}"
-            r = requests.get(url, timeout=10)
-            if r.status_code == 200:
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                now = int(time.time())
+                one_year_ago = now - (365 * 24 * 60 * 60)
+                url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}&resolution=D&from={one_year_ago}&to={now}&token={FKEY}"
+                r = requests.get(url, timeout=15)
+                
+                if r.status_code == 429:
+                    # Rate limit — 백오프 후 재시도
+                    wait = 2 ** attempt
+                    print(f"    ⏳ Finnhub {symbol} rate limit (시도 {attempt}/{MAX_RETRIES}) → {wait}초 대기")
+                    time.sleep(wait)
+                    continue
+                
+                if r.status_code != 200:
+                    print(f"    ⚠️ Finnhub {symbol} HTTP {r.status_code} (시도 {attempt}/{MAX_RETRIES})")
+                    time.sleep(1)
+                    continue
+                    
                 data = r.json()
                 if data.get("s") == "ok":
                     closes = data.get("c", [])
@@ -55,25 +71,47 @@ def calculate_12_1_momentum(symbol):
                         price_t12 = closes[0]
                         if price_t12 > 0:
                             return round((price_t1 / price_t12) - 1, 4)
-        except Exception as e:
-            print(f"    ⚠️ Finnhub 5단계 에러({e}) ({symbol})")
+                    else:
+                        print(f"    ⚠️ Finnhub {symbol} 데이터 부족 ({len(closes)}일치, 22일 필요)")
+                        break  # 데이터 자체가 부족하면 재시도 의미 없음 → Yahoo로
+                else:
+                    status = data.get("s", "unknown")
+                    print(f"    ⚠️ Finnhub {symbol} 상태: {status} (시도 {attempt}/{MAX_RETRIES})")
+                    if status == "no_data":
+                        break  # 데이터 없으면 재시도 의미 없음 → Yahoo로
+                    time.sleep(1)
+                    continue
+                    
+            except requests.exceptions.Timeout:
+                wait = 2 ** attempt
+                print(f"    ⏳ Finnhub {symbol} 타임아웃 (시도 {attempt}/{MAX_RETRIES}) → {wait}초 대기")
+                time.sleep(wait)
+            except Exception as e:
+                print(f"    ⚠️ Finnhub {symbol} 에러: {e} (시도 {attempt}/{MAX_RETRIES})")
+                time.sleep(1)
 
-    # 2차: Yahoo Finance (Fallback)
-    try:
-        import yfinance as yf
-        t = yf.Ticker(symbol)
-        hist = t.history(period="1y")
-        if len(hist) > 21:
-            closes = hist["Close"].tolist()
-            price_t1 = closes[-22]
-            price_t12 = closes[0]
-            if price_t12 > 0:
-                return round((price_t1 / price_t12) - 1, 4)
-    except Exception as e:
-        print(f"    ⚠️ Yahoo 5단계 폴백 에러({e}) ({symbol})")
+    # ═══ 2차: Yahoo Finance (Fallback) — 3회 재시도 ═══
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            import yfinance as yf
+            t = yf.Ticker(symbol)
+            hist = t.history(period="1y")
+            if len(hist) > 21:
+                closes = hist["Close"].tolist()
+                price_t1 = closes[-22]
+                price_t12 = closes[0]
+                if price_t12 > 0:
+                    return round((price_t1 / price_t12) - 1, 4)
+            else:
+                print(f"    ⚠️ Yahoo {symbol} 데이터 부족 ({len(hist)}일)")
+                break  # 데이터 부족은 재시도 의미 없음
+        except Exception as e:
+            wait = 2 ** attempt
+            print(f"    ⚠️ Yahoo {symbol} 에러: {e} (시도 {attempt}/{MAX_RETRIES}) → {wait}초 대기")
+            time.sleep(wait)
 
     # ★ Finnhub + Yahoo 둘 다 실패 → None 반환 (API 장애와 모멘텀 0 구분)
-    print(f"    🚨 {symbol} 12-1 모멘텀 데이터 수집 실패 (Finnhub+Yahoo)")
+    print(f"    🚨 {symbol} 12-1 모멘텀 데이터 수집 실패 (Finnhub {MAX_RETRIES}회 + Yahoo {MAX_RETRIES}회 시도 후 포기)")
     return None
 
 

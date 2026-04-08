@@ -332,25 +332,9 @@ def stage3_candle(candidates):
         sym = item["Symbol"]
         closes = None
         source = None
-
-        # ═══ 1차: Finnhub /stock/candle (Primary) ═══
-        now_ts = int(time.time())
-        one_year_ago = now_ts - (364 * 24 * 60 * 60)  # 무료 플랜 1년 제한 회피
-        data = finnhub_request(
-            "/stock/candle",
-            {"symbol": sym, "resolution": "D", "from": one_year_ago, "to": now_ts},
-            timeout=15,
-        )
-
-        if data and data.get("s") == "ok":
-            c = data.get("c", [])
-            if len(c) >= 50:
-                closes = c
-                source = "Finnhub"
-
-        # ═══ 2차: Yahoo (Backup) ═══
-        if closes is None:
-            closes, source = get_candle_data(sym)
+        # ═══ 1차: Yahoo (Primary) ═══
+        # Finnhub /stock/candle 무료 티어 제한(403) 우회를 위해 Yahoo를 1차로 사용
+        closes, source = get_candle_data(sym)
 
         # 전부 실패
         if closes is None:

@@ -1,6 +1,19 @@
 {
-  "timestamp": "2026-04-07 21:39",
-  "sell": [],
+  "timestamp": "2026-04-08 04:40",
+  "sell": [
+    {
+      "symbol": "JBL",
+      "qty": 19,
+      "buy_avg": 251.613,
+      "current": 272.85,
+      "pnl_rate": 8.44,
+      "pnl_amt": 403.5,
+      "reasons": [
+        "4단계(성장) 탈락: Surprise 6.2% < 10% & Growth 0.0% < 20%"
+      ],
+      "action": "SELL"
+    }
+  ],
   "buy": [
     {
       "symbol": "LITE",
@@ -29,11 +42,18 @@
       "price": "1424.91",
       "reason": "12-1 모멘텀: 310.84% | Top 5 선정",
       "action": "BUY"
+    },
+    {
+      "symbol": "TER",
+      "name": "Teradyne",
+      "price": "320.48",
+      "reason": "12-1 모멘텀: 303.27% | Top 5 선정",
+      "action": "BUY"
     }
   ],
   "held_count": 1,
-  "remaining_held": 1,
-  "available_slots": 4,
-  "scan_passed": 39,
+  "remaining_held": 0,
+  "available_slots": 5,
+  "scan_passed": 0,
   "picks_passed": 5
 }

@@ -319,21 +319,39 @@ def stage12_finnhub_metric(tickers, name_map):
 def stage3_candle(candidates):
     """
     1년 캔들 데이터 수집 → 50MA 필터 (3단계) + 12-1 모멘텀 (6단계)
-    3중 백업: Yahoo → Stooq → Google Finance
-    전부 실패 시 텔레그램 긴급 알림
+    1차 Finnhub /candle → 2차 Yahoo (다른 단계와 동일한 구조)
     """
     passed = []
-    source_counts = {"Yahoo": 0, "Stooq": 0, "Google": 0, "fail": 0}
+    source_counts = {"Finnhub": 0, "Yahoo": 0, "Stooq": 0, "Google": 0, "fail": 0}
 
     for i, item in enumerate(candidates):
         if check_timeout():
             break
 
         sym = item["Symbol"]
+        closes = None
+        source = None
 
-        # 3중 백업 캔들 수집
-        closes, source = get_candle_data(sym)
+        # ═══ 1차: Finnhub /stock/candle (Primary) ═══
+        now_ts = int(time.time())
+        one_year_ago = now_ts - (365 * 24 * 60 * 60)
+        data = finnhub_request(
+            "/stock/candle",
+            {"symbol": sym, "resolution": "D", "from": one_year_ago, "to": now_ts},
+            timeout=15,
+        )
 
+        if data and data.get("s") == "ok":
+            c = data.get("c", [])
+            if len(c) >= 50:
+                closes = c
+                source = "Finnhub"
+
+        # ═══ 2차: Yahoo (Backup) ═══
+        if closes is None:
+            closes, source = get_candle_data(sym)
+
+        # 전부 실패
         if closes is None:
             source_counts["fail"] += 1
             alert_data_gap(sym, "3+6단계(캔들)")
@@ -367,9 +385,9 @@ def stage3_candle(candidates):
         if (i + 1) % 30 == 0 or i == len(candidates) - 1:
             print(f"   📡 {i+1}/{len(candidates)} 처리 | 통과: {len(passed)}")
 
-        time.sleep(0.3)
+        time.sleep(1.1)  # Finnhub 분당 60콜 준수
 
-    print(f"   📊 데이터 소스: Yahoo {source_counts['Yahoo']} | Stooq {source_counts['Stooq']} | Google {source_counts['Google']}")
+    print(f"   📊 데이터 소스: Finnhub {source_counts['Finnhub']} | Yahoo {source_counts.get('Yahoo',0)} | Stooq {source_counts.get('Stooq',0)} | Google {source_counts.get('Google',0)}")
     if source_counts["fail"] > 0:
         print(f"   🚨 데이터 누락: {source_counts['fail']}종목 (텔레그램 알림 발송됨)")
 

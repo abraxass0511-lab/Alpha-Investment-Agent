@@ -675,6 +675,47 @@ async function sleep(ms) {
 async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, maxRetries = 3) {
   const side = trId === "VTTT1002U" ? "매수" : "매도";
   
+  // 모의투자는 지정가(ORD_DVSN "00")만 지원 — 시장가("01") 사용 불가
+  // price가 없으면 현재가를 조회하여 지정가 주문
+  let orderPrice = String(price || "0");
+  if (!price || parseFloat(orderPrice) <= 0) {
+    // 현재가 조회
+    try {
+      const token = await getKisToken(env);
+      if (token) {
+        const exchMap = { "NASD": "NAS", "NYSE": "NYS", "AMEX": "AMS" };
+        const priceExch = exchMap[exchange] || "NAS";
+        const pUrl = `${env.KIS_BASE_URL}/uapi/overseas-price/v1/quotations/price`;
+        const pParams = new URLSearchParams({ AUTH: "", EXCD: priceExch, SYMB: symbol });
+        const pR = await fetch(`${pUrl}?${pParams}`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            appkey: env.KIS_APP_KEY,
+            appsecret: env.KIS_SECRET_KEY,
+            "tr_id": "HHDFS00000300",
+          },
+        });
+        const pData = await pR.json();
+        if (pData.rt_cd === "0" && parseFloat(pData.output?.last || "0") > 0) {
+          const lastPrice = parseFloat(pData.output.last);
+          // 매수: +0.5% 마진, 매도: -0.5% 마진 (체결 확보)
+          orderPrice = side === "매수"
+            ? (lastPrice * 1.005).toFixed(2)
+            : (lastPrice * 0.995).toFixed(2);
+          console.log(`💲 ${symbol} 현재가 $${lastPrice} → ${side}가 $${orderPrice}`);
+        }
+      }
+    } catch (e) {
+      console.log(`⚠️ ${symbol} 현재가 조회 실패: ${e.message}`);
+    }
+  }
+
+  // 가격이 여전히 0이면 주문 불가
+  if (parseFloat(orderPrice) <= 0) {
+    return { success: false, error: "현재가 조회 실패 (지정가 필요)" };
+  }
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const token = await getKisToken(env, attempt > 1); // 재시도 시 토큰 강제 갱신
@@ -703,9 +744,9 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
           OVRS_EXCG_CD: exchange,
           PDNO: symbol,
           ORD_QTY: String(qty),
-          OVRS_ORD_UNPR: "0",
+          OVRS_ORD_UNPR: orderPrice,
           ORD_SVR_DVSN_CD: "0",
-          ORD_DVSN: "01",
+          ORD_DVSN: "00",
         }),
       });
 

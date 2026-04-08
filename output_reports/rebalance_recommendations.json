@@ -1,59 +1,39 @@
 {
-  "timestamp": "2026-04-08 04:40",
-  "sell": [
-    {
-      "symbol": "JBL",
-      "qty": 19,
-      "buy_avg": 251.613,
-      "current": 272.85,
-      "pnl_rate": 8.44,
-      "pnl_amt": 403.5,
-      "reasons": [
-        "4단계(성장) 탈락: Surprise 6.2% < 10% & Growth 0.0% < 20%"
-      ],
-      "action": "SELL"
-    }
-  ],
+  "timestamp": "2026-04-08 07:20",
+  "sell": [],
   "buy": [
     {
       "symbol": "LITE",
       "name": "Lumentum",
-      "price": "815.75",
+      "price": "772.28",
       "reason": "12-1 모멘텀: 1016.43% | Top 5 선정",
       "action": "BUY"
     },
     {
       "symbol": "WDC",
       "name": "Western Digital",
-      "price": "311.96",
+      "price": "304.15",
       "reason": "12-1 모멘텀: 680.69% | Top 5 선정",
       "action": "BUY"
     },
     {
       "symbol": "STX",
       "name": "Seagate Technology",
-      "price": "468.72",
+      "price": "453.3",
       "reason": "12-1 모멘텀: 436.11% | Top 5 선정",
       "action": "BUY"
     },
     {
       "symbol": "FIX",
       "name": "Comfort Systems USA",
-      "price": "1424.91",
+      "price": "1434.09",
       "reason": "12-1 모멘텀: 310.84% | Top 5 선정",
-      "action": "BUY"
-    },
-    {
-      "symbol": "TER",
-      "name": "Teradyne",
-      "price": "320.48",
-      "reason": "12-1 모멘텀: 303.27% | Top 5 선정",
       "action": "BUY"
     }
   ],
   "held_count": 1,
-  "remaining_held": 0,
-  "available_slots": 5,
-  "scan_passed": 0,
+  "remaining_held": 1,
+  "available_slots": 4,
+  "scan_passed": 48,
   "picks_passed": 5
 }

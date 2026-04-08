@@ -131,7 +131,8 @@ def yahoo_backup_candle(symbol):
         t = yf.Ticker(symbol)
         hist = t.history(period="1y")
         if len(hist) >= 50:
-            return hist["Close"].tolist()
+            # yfinance가 장 시작 전 최신 날짜를 NaN으로 반환하는 버그 방어
+            return hist["Close"].dropna().tolist()
     except Exception as e:
         print(f"    ⚠️ Yahoo 캔들 실패({symbol}): {e}")
     return None
@@ -334,7 +335,7 @@ def stage3_candle(candidates):
 
         # ═══ 1차: Finnhub /stock/candle (Primary) ═══
         now_ts = int(time.time())
-        one_year_ago = now_ts - (365 * 24 * 60 * 60)
+        one_year_ago = now_ts - (364 * 24 * 60 * 60)  # 무료 플랜 1년 제한 회피
         data = finnhub_request(
             "/stock/candle",
             {"symbol": sym, "resolution": "D", "from": one_year_ago, "to": now_ts},
@@ -363,7 +364,7 @@ def stage3_candle(candidates):
             current_price = closes[-1]
             ma50 = sum(closes[-50:]) / 50
 
-            if current_price > ma50:
+            if current_price >= ma50:
                 ma_momentum = round(((current_price - ma50) / ma50) * 100, 2)
                 item["Price"] = round(current_price, 2)
                 item["MA50"] = round(ma50, 2)

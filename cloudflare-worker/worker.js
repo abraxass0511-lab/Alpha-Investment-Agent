@@ -675,40 +675,49 @@ async function sleep(ms) {
 async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, maxRetries = 3) {
   const side = trId === "VTTT1002U" ? "매수" : "매도";
   
+  // ═══ 모의투자 지정가 전략 ═══
   // 모의투자는 지정가(ORD_DVSN "00")만 지원 — 시장가("01") 사용 불가
-  // price가 없으면 현재가를 조회하여 지정가 주문
-  let orderPrice = String(price || "0");
-  if (!price || parseFloat(orderPrice) <= 0) {
-    // 현재가 조회
-    try {
-      const token = await getKisToken(env);
-      if (token) {
-        const exchMap = { "NASD": "NAS", "NYSE": "NYS", "AMEX": "AMS" };
-        const priceExch = exchMap[exchange] || "NAS";
-        const pUrl = `${env.KIS_BASE_URL}/uapi/overseas-price/v1/quotations/price`;
-        const pParams = new URLSearchParams({ AUTH: "", EXCD: priceExch, SYMB: symbol });
-        const pR = await fetch(`${pUrl}?${pParams}`, {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            appkey: env.KIS_APP_KEY,
-            appsecret: env.KIS_SECRET_KEY,
-            "tr_id": "HHDFS00000300",
-          },
-        });
-        const pData = await pR.json();
-        if (pData.rt_cd === "0" && parseFloat(pData.output?.last || "0") > 0) {
-          const lastPrice = parseFloat(pData.output.last);
-          // 매수: +0.5% 마진, 매도: -0.5% 마진 (체결 확보)
-          orderPrice = side === "매수"
-            ? (lastPrice * 1.005).toFixed(2)
-            : (lastPrice * 0.995).toFixed(2);
-          console.log(`💲 ${symbol} 현재가 $${lastPrice} → ${side}가 $${orderPrice}`);
-        }
+  // 핵심: 항상 실시간 현재가를 조회하고, 공격적 마진(+5%/-5%)으로 사실상 시장가 효과
+  // → 현재가보다 5% 높은 지정가 매수 = 즉시 현재 시장가로 체결 (초과분은 미사용)
+  let orderPrice = "0";
+
+  try {
+    const token = await getKisToken(env);
+    if (token) {
+      const exchMap = { "NASD": "NAS", "NYSE": "NYS", "AMEX": "AMS" };
+      const priceExch = exchMap[exchange] || "NAS";
+      const pUrl = `${env.KIS_BASE_URL}/uapi/overseas-price/v1/quotations/price`;
+      const pParams = new URLSearchParams({ AUTH: "", EXCD: priceExch, SYMB: symbol });
+      const pR = await fetch(`${pUrl}?${pParams}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          appkey: env.KIS_APP_KEY,
+          appsecret: env.KIS_SECRET_KEY,
+          "tr_id": "HHDFS00000300",
+        },
+      });
+      const pData = await pR.json();
+      if (pData.rt_cd === "0" && parseFloat(pData.output?.last || "0") > 0) {
+        const lastPrice = parseFloat(pData.output.last);
+        // 매수: +5% 마진, 매도: -5% 마진 → 사실상 시장가처럼 즉시 체결
+        orderPrice = side === "매수"
+          ? (lastPrice * 1.05).toFixed(2)
+          : (lastPrice * 0.95).toFixed(2);
+        console.log(`💲 ${symbol} 실시간 $${lastPrice} → ${side} 지정가 $${orderPrice} (${side === "매수" ? "+5%" : "-5%"})`);
       }
-    } catch (e) {
-      console.log(`⚠️ ${symbol} 현재가 조회 실패: ${e.message}`);
     }
+  } catch (e) {
+    console.log(`⚠️ ${symbol} 현재가 조회 실패: ${e.message}`);
+  }
+
+  // 실시간 조회 실패 시 CSV 가격에 마진 적용 (폴백)
+  if (parseFloat(orderPrice) <= 0 && price && parseFloat(String(price)) > 0) {
+    const csvPrice = parseFloat(String(price));
+    orderPrice = side === "매수"
+      ? (csvPrice * 1.05).toFixed(2)
+      : (csvPrice * 0.95).toFixed(2);
+    console.log(`⚠️ ${symbol} 폴백: CSV가격 $${csvPrice} → ${side} 지정가 $${orderPrice}`);
   }
 
   // 가격이 여전히 0이면 주문 불가

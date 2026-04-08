@@ -1,39 +1,25 @@
 {
-  "timestamp": "2026-04-08 07:20",
+  "timestamp": "2026-04-08 21:25",
   "sell": [],
   "buy": [
     {
       "symbol": "LITE",
       "name": "Lumentum",
-      "price": "772.28",
-      "reason": "12-1 모멘텀: 1016.43% | Top 5 선정",
-      "action": "BUY"
-    },
-    {
-      "symbol": "WDC",
-      "name": "Western Digital",
-      "price": "304.15",
-      "reason": "12-1 모멘텀: 680.69% | Top 5 선정",
+      "price": "896.02",
+      "reason": "12-1 모멘텀: 971.21% | Top 5 선정",
       "action": "BUY"
     },
     {
       "symbol": "STX",
       "name": "Seagate Technology",
-      "price": "453.3",
-      "reason": "12-1 모멘텀: 436.11% | Top 5 선정",
-      "action": "BUY"
-    },
-    {
-      "symbol": "FIX",
-      "name": "Comfort Systems USA",
-      "price": "1434.09",
-      "reason": "12-1 모멘텀: 310.84% | Top 5 선정",
+      "price": "496.3",
+      "reason": "12-1 모멘텀: 409.48% | Top 5 선정",
       "action": "BUY"
     }
   ],
-  "held_count": 1,
-  "remaining_held": 1,
-  "available_slots": 4,
-  "scan_passed": 48,
+  "held_count": 3,
+  "remaining_held": 3,
+  "available_slots": 2,
+  "scan_passed": 70,
   "picks_passed": 5
 }

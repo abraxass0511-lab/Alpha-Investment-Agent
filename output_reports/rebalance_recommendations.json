@@ -1,25 +1,10 @@
 {
-  "timestamp": "2026-04-09 02:17",
+  "timestamp": "2026-04-09 21:25",
   "sell": [],
-  "buy": [
-    {
-      "symbol": "LITE",
-      "name": "Lumentum",
-      "price": "896.02",
-      "reason": "12-1 모멘텀: 971.21% | Top 5 선정",
-      "action": "BUY"
-    },
-    {
-      "symbol": "STX",
-      "name": "Seagate Technology",
-      "price": "496.3",
-      "reason": "12-1 모멘텀: 409.48% | Top 5 선정",
-      "action": "BUY"
-    }
-  ],
-  "held_count": 3,
-  "remaining_held": 3,
-  "available_slots": 2,
-  "scan_passed": 70,
+  "buy": [],
+  "held_count": 5,
+  "remaining_held": 5,
+  "available_slots": 0,
+  "scan_passed": 74,
   "picks_passed": 5
 }

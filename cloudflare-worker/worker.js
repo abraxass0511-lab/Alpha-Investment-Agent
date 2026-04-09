@@ -237,60 +237,95 @@ export default {
         if (fillPend) {
           const fillData = JSON.parse(fillPend);
           const etHour = getETHour();
+          // ★ KV에 저장된 주문 날짜(KST)로 조회 — UTC/KST 불일치 방지
+          const orderDateKst = fillData.order_date_kst || null;
 
-          const orders = await checkOrderFills(env);
+          const orders = await checkOrderFills(env, orderDateKst);
 
           if (!orders) {
             if (etHour >= 16 && etHour < 21) {
-              await sendMessage(env, "\u26a0\ufe0f *[\uccb4\uacb0 \ud655\uc778 \uc2e4\ud328]*\n\n\uc7a5 \ub9c8\uac10\uae4c\uc9c0 \uccb4\uacb0 \ub0b4\uc5ed \uc870\ud68c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\nKIS API \uc751\ub2f5 \uc624\ub958\uc785\ub2c8\ub2e4, \ub300\ud45c\ub2d8.\n\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \uccb4\uacb0 \uc5ec\ubd80\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.", REPLY_KEYBOARD);
+              await sendMessage(env, "⚠️ *[체결 확인 실패]*\n\n장 마감까지 체결 내역 조회에 실패했습니다.\nKIS API 응답 오류입니다, 대표님.\n\n💱 KIS 앱에서 직접 체결 여부를 확인해 주세요.", REPLY_KEYBOARD);
               await env.KV.delete("pending_fill_check");
             }
           } else {
             const symbols = fillData.symbols || [];
-            let filledAll = true;
-            let msg = "\ud83d\udcca *[\uccb4\uacb0 \uc54c\ub9bc]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
-            let filledCount = 0;
+            let filledSymbols = [];
+            let unfilledSymbols = [];
+            let msg = "📊 *[체결 알림]*\n━━━━━━━━━━━━━━━\n\n";
 
             if (orders.length > 0) {
-              for (const ord of orders) {
+              // 주문 내역에서 우리가 관심 있는 종목만 필터
+              const relevantOrders = orders.filter(ord => {
                 const sym = ord.pdno || ord.ovrs_pdno || "?";
-                if (symbols.length > 0 && !symbols.includes(sym)) continue;
+                return symbols.length === 0 || symbols.includes(sym);
+              });
 
-                const side = ord.sll_buy_dvsn_cd === "02" ? "\ub9e4\uc218" : "\ub9e4\ub3c4";
+              for (const ord of relevantOrders) {
+                const sym = ord.pdno || ord.ovrs_pdno || "?";
+                const side = ord.sll_buy_dvsn_cd === "02" ? "매수" : "매도";
                 const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
                 const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
                 const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
 
                 if (fillQty > 0) {
-                  filledCount++;
-                  const emoji = side === "\ub9e4\uc218" ? "\u2705" : "\ud83d\udd3b";
-                  msg += `${emoji} *${sym}* ${side} \uccb4\uacb0 \uc644\ub8cc!\n`;
-                  msg += `   \ud83d\udcca ${fillQty}\uc8fc \u00d7 $${parseFloat(fillPrice).toFixed(2)}\n\n`;
+                  filledSymbols.push(sym);
+                  const emoji = side === "매수" ? "✅" : "🔻";
+                  msg += `${emoji} *${sym}* ${side} 체결 완료!\n`;
+                  msg += `   📊 ${fillQty}주 × $${parseFloat(fillPrice).toFixed(2)}\n\n`;
                 } else {
-                  filledAll = false;
+                  unfilledSymbols.push({ sym, side, ordQty });
                 }
+              }
+
+              // 주문 내역에 없는 종목도 미체결로 처리
+              const orderedSymsInResult = relevantOrders.map(o => o.pdno || o.ovrs_pdno || "");
+              for (const sym of symbols) {
+                if (!orderedSymsInResult.includes(sym) && !filledSymbols.includes(sym)) {
+                  unfilledSymbols.push({ sym, side: "매수", ordQty: 0 });
+                }
+              }
+            } else {
+              // 주문 내역 0건 — 모든 심볼이 미체결
+              for (const sym of symbols) {
+                unfilledSymbols.push({ sym, side: "매수", ordQty: 0 });
               }
             }
 
-            if (filledCount > 0 && filledAll) {
+            const filledAll = unfilledSymbols.length === 0 && filledSymbols.length > 0;
+
+            if (filledSymbols.length > 0 && filledAll) {
+              msg += "🎉 _전종목 체결 완료!_";
               await sendMessage(env, msg, REPLY_KEYBOARD);
               await env.KV.delete("pending_fill_check");
-            } else if (filledCount > 0 && !filledAll) {
-              msg += "_\ub098\uba38\uc9c0 \uc885\ubaa9 \uccb4\uacb0 \ub300\uae30 \uc911..._";
-              await sendMessage(env, msg, REPLY_KEYBOARD);
-            } else if (etHour >= 16 && etHour < 21) {
-              let closeMsg = "\ud83d\udd52 *[\uc7a5 \ub9c8\uac10 \uccb4\uacb0 \ud655\uc778]*\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n";
-              if (orders.length === 0) {
-                closeMsg += "\u26a0\ufe0f \uc624\ub298 \uc8fc\ubb38 \ub0b4\uc5ed\uc774 \uc870\ud68c\ub418\uc9c0 \uc54a\uc558\uc2b5\ub2c8\ub2e4.\n";
-              } else {
-                closeMsg += "\u26a0\ufe0f \uccb4\uacb0 \uac10\uc9c0\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.\n";
-                closeMsg += `\ud83d\udcdd \uc870\ud68c\ub41c \uc8fc\ubb38: ${orders.length}\uac74\n`;
-                if (orders[0]) {
-                  const keys = Object.keys(orders[0]).join(", ");
-                  closeMsg += `\ud83d\udd0d \uc751\ub2f5 \ud544\ub4dc: _${keys.substring(0, 200)}_\n`;
-                }
+            } else if (filledSymbols.length > 0 && !filledAll) {
+              // 부분 체결: 체결된 것 알리고 미체결 목록도 표시
+              msg += "⏳ *미체결 종목:*\n";
+              for (const u of unfilledSymbols) {
+                msg += `  ⚠️ ${u.sym} — 지정가 미도달 (체결 대기 중)\n`;
               }
-              closeMsg += "\n\ud83d\udcb1 KIS \uc571\uc5d0\uc11c \uc9c1\uc811 \ud655\uc778\ud574 \uc8fc\uc138\uc694, \ub300\ud45c\ub2d8.";
+              await sendMessage(env, msg, REPLY_KEYBOARD);
+              // 장 마감 후라면 미체결 건 정리
+              if (etHour >= 16) {
+                msg += "\n⏰ _장 마감으로 미체결 주문은 자동 취소됩니다._";
+                await sendMessage(env, "⏰ *[장 마감 정리]*\n\n" +
+                  `✅ 체결 완료: ${filledSymbols.join(", ")}\n` +
+                  `❌ 미체결 (자동취소): ${unfilledSymbols.map(u => u.sym).join(", ")}\n\n` +
+                  "_미체결 종목은 지정가(+15%) 초과 급등으로 체결되지 못했습니다._", REPLY_KEYBOARD);
+                await env.KV.delete("pending_fill_check");
+              }
+            } else if (etHour >= 16 && etHour < 21) {
+              // 전부 미체결 + 장 마감
+              let closeMsg = "🕒 *[장 마감 체결 확인]*\n━━━━━━━━━━━━━━━\n\n";
+              if (unfilledSymbols.length > 0) {
+                closeMsg += "⚠️ 전종목 미체결 (장 마감 자동 취소):\n";
+                for (const u of unfilledSymbols) {
+                  closeMsg += `  ❌ ${u.sym}\n`;
+                }
+                closeMsg += "\n_지정가 초과 급등으로 체결되지 못했습니다._";
+              } else {
+                closeMsg += "⚠️ 오늘 주문 내역이 조회되지 않았습니다.\n";
+              }
+              closeMsg += "\n💱 KIS 앱에서 직접 확인해 주세요, 대표님.";
               await sendMessage(env, closeMsg, REPLY_KEYBOARD);
               await env.KV.delete("pending_fill_check");
             }
@@ -677,8 +712,8 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
   
   // ═══ 모의투자 지정가 전략 ═══
   // 모의투자는 지정가(ORD_DVSN "00")만 지원 — 시장가("01") 사용 불가
-  // 핵심: 항상 실시간 현재가를 조회하고, 공격적 마진(+5%/-5%)으로 사실상 시장가 효과
-  // → 현재가보다 5% 높은 지정가 매수 = 즉시 현재 시장가로 체결 (초과분은 미사용)
+  // 핵심: 항상 실시간 현재가를 조회하고, 공격적 마진(+15%/-15%)으로 사실상 시장가 효과
+  // → 현재가보다 15% 높은 지정가 매수 = 즉시 현재 시장가로 체결 (초과분은 미사용)
   let orderPrice = "0";
 
   try {
@@ -700,11 +735,11 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
       const pData = await pR.json();
       if (pData.rt_cd === "0" && parseFloat(pData.output?.last || "0") > 0) {
         const lastPrice = parseFloat(pData.output.last);
-        // 매수: +5% 마진, 매도: -5% 마진 → 사실상 시장가처럼 즉시 체결
+        // 매수: +15% 마진, 매도: -15% 마진 → 급등/급락에도 확실한 체결 보장
         orderPrice = side === "매수"
-          ? (lastPrice * 1.05).toFixed(2)
-          : (lastPrice * 0.95).toFixed(2);
-        console.log(`💲 ${symbol} 실시간 $${lastPrice} → ${side} 지정가 $${orderPrice} (${side === "매수" ? "+5%" : "-5%"})`);
+          ? (lastPrice * 1.15).toFixed(2)
+          : (lastPrice * 0.85).toFixed(2);
+        console.log(`💲 ${symbol} 실시간 $${lastPrice} → ${side} 지정가 $${orderPrice} (${side === "매수" ? "+15%" : "-15%"})`);
       }
     }
   } catch (e) {
@@ -715,8 +750,8 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
   if (parseFloat(orderPrice) <= 0 && price && parseFloat(String(price)) > 0) {
     const csvPrice = parseFloat(String(price));
     orderPrice = side === "매수"
-      ? (csvPrice * 1.05).toFixed(2)
-      : (csvPrice * 0.95).toFixed(2);
+      ? (csvPrice * 1.15).toFixed(2)
+      : (csvPrice * 0.85).toFixed(2);
     console.log(`⚠️ ${symbol} 폴백: CSV가격 $${csvPrice} → ${side} 지정가 $${orderPrice}`);
   }
 
@@ -805,18 +840,29 @@ async function buyOrder(env, symbol, qty, price, exchange = null) {
 }
 
 // === 체결 확인 함수 (KIS 주문체결내역 조회) ===
-async function checkOrderFills(env) {
+// ★ KIS API는 KST(한국시간) 기준 날짜를 사용 — UTC 사용 시 날짜 불일치 발생!
+async function checkOrderFills(env, orderDate) {
   const token = await getKisToken(env);
   if (!token) return null;
 
+  // orderDate가 있으면 그 날짜 사용, 없으면 KST 기준 오늘
+  let queryDate;
+  if (orderDate) {
+    queryDate = orderDate.replace(/-/g, "");
+  } else {
+    // KST = UTC+9 기준 오늘 날짜
+    const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+    queryDate = kstNow.toISOString().slice(0, 10).replace(/-/g, "");
+  }
+  console.log(`📅 체결 조회 날짜(KST): ${queryDate}`);
+
   const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-ccnl`;
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const params = new URLSearchParams({
     CANO: env.KIS_CANO,
     ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
     PDNO: "",
-    ORD_STRT_DT: today,
-    ORD_END_DT: today,
+    ORD_STRT_DT: queryDate,
+    ORD_END_DT: queryDate,
     SLL_BUY_DVSN: "00",
     CCLD_NCCS_DVSN: "00",
     OVRS_EXCG_CD: "",
@@ -840,17 +886,24 @@ async function checkOrderFills(env) {
 
   const data = await r.json();
   if (data.rt_cd === "0") {
+    console.log(`📋 체결 조회 결과: ${(data.output || []).length}건`);
     return data.output || [];
   }
+  console.log(`❌ 체결 조회 실패: ${data.msg1 || JSON.stringify(data)}`);
   return null;
 }
 
 // KV에 체결 확인 대상 저장 (cron이 5분 간격으로 확인)
+// ★ 주문 날짜(KST)를 함께 저장하여, 체결 확인 시 정확한 날짜로 조회
 async function saveFillCheckToKV(env, orderedSymbols) {
   if (!env.KV || !orderedSymbols || orderedSymbols.length === 0) return;
+  // KST 기준 날짜 저장 (KIS API가 KST 날짜를 사용하므로)
+  const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+  const kstDate = kstNow.toISOString().slice(0, 10);
   await env.KV.put("pending_fill_check", JSON.stringify({
     symbols: orderedSymbols,
     ordered_at: new Date().toISOString(),
+    order_date_kst: kstDate,
   }));
 }
 

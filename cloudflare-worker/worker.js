@@ -1259,7 +1259,12 @@ async function handleDeposit(env) {
     if (holdings && holdings.length > 0) {
       const totalEval = holdings.reduce((sum, h) => {
         const qty = parseInt(h.ovrs_cblc_qty || "0");
-        return qty > 0 ? sum + parseFloat(h.now_pric2 || "0") * qty : sum;
+        if (qty <= 0) return sum;
+        // ★ ovrs_stck_evlu_amt(해외주식평가금액)를 우선 사용 (KIS가 계산한 정확한 값)
+        const evalAmt = parseFloat(h.ovrs_stck_evlu_amt || "0");
+        if (evalAmt > 0) return sum + evalAmt;
+        // fallback: now_pric2 * qty (장 외 시간 등 부정확할 수 있음)
+        return sum + parseFloat(h.now_pric2 || "0") * qty;
       }, 0);
       const totalAsset = totalEval + parseFloat(usd);
       cashRatio = totalAsset > 0 ? (parseFloat(usd) / totalAsset * 100) : 100;

@@ -239,19 +239,28 @@ export default {
           const etHour = getETHour();
           // ★ KV에 저장된 주문 날짜(KST)로 조회 — UTC/KST 불일치 방지
           const orderDateKst = fillData.order_date_kst || null;
+          // ★ 폴링 횟수 추적 (무한 대기 방지)
+          const pollCount = (fillData.poll_count || 0) + 1;
+          // ★ 이미 알림 보낸 종목 추적 (중복 알림 방지)
+          const alreadyNotified = fillData.notified_symbols || [];
 
           const orders = await checkOrderFills(env, orderDateKst);
 
           if (!orders) {
-            if (etHour >= 16 && etHour < 21) {
-              await sendMessage(env, "⚠️ *[체결 확인 실패]*\n\n장 마감까지 체결 내역 조회에 실패했습니다.\nKIS API 응답 오류입니다, 대표님.\n\n💱 KIS 앱에서 직접 체결 여부를 확인해 주세요.", REPLY_KEYBOARD);
+            // API 실패 시: 10회 이상 실패하면 대표님께 알림
+            if (pollCount >= 10 || (etHour >= 16 && etHour < 21)) {
+              await sendMessage(env, "⚠️ *[체결 확인 실패]*\n\n체결 내역 조회에 반복 실패했습니다.\nKIS API 응답 오류입니다, 대표님.\n\n💱 KIS 앱에서 직접 체결 여부를 확인해 주세요.", REPLY_KEYBOARD);
               await env.KV.delete("pending_fill_check");
+            } else {
+              // 폴링 카운트만 증가시키고 다음 cron에서 재시도
+              await env.KV.put("pending_fill_check", JSON.stringify({
+                ...fillData, poll_count: pollCount,
+              }));
             }
           } else {
             const symbols = fillData.symbols || [];
             let filledSymbols = [];
             let unfilledSymbols = [];
-            let msg = "📊 *[체결 알림]*\n━━━━━━━━━━━━━━━\n\n";
 
             if (orders.length > 0) {
               // 주문 내역에서 우리가 관심 있는 종목만 필터
@@ -269,9 +278,6 @@ export default {
 
                 if (fillQty > 0) {
                   filledSymbols.push(sym);
-                  const emoji = side === "매수" ? "✅" : "🔻";
-                  msg += `${emoji} *${sym}* ${side} 체결 완료!\n`;
-                  msg += `   📊 ${fillQty}주 × $${parseFloat(fillPrice).toFixed(2)}\n\n`;
                 } else {
                   unfilledSymbols.push({ sym, side, ordQty });
                 }
@@ -291,43 +297,73 @@ export default {
               }
             }
 
+            // ★ 새로 체결된 종목만 추출 (이미 알림 보낸 건 제외)
+            const newlyFilled = filledSymbols.filter(s => !alreadyNotified.includes(s));
             const filledAll = unfilledSymbols.length === 0 && filledSymbols.length > 0;
 
-            if (filledSymbols.length > 0 && filledAll) {
-              msg += "🎉 _전종목 체결 완료!_";
-              await sendMessage(env, msg, REPLY_KEYBOARD);
-              await env.KV.delete("pending_fill_check");
-            } else if (filledSymbols.length > 0 && !filledAll) {
-              // 부분 체결: 체결된 것 알리고 미체결 목록도 표시
-              msg += "⏳ *미체결 종목:*\n";
-              for (const u of unfilledSymbols) {
-                msg += `  ⚠️ ${u.sym} — 지정가 미도달 (체결 대기 중)\n`;
+            // ★★★ 핵심 개선: 새로 체결된 종목이 있으면 즉시 알림 ★★★
+            if (newlyFilled.length > 0) {
+              let msg = "📊 *[체결 알림]*\n━━━━━━━━━━━━━━━\n\n";
+
+              // 체결 내역 상세 표시
+              for (const ord of (orders || [])) {
+                const sym = ord.pdno || ord.ovrs_pdno || "?";
+                if (!newlyFilled.includes(sym)) continue;
+                const side = ord.sll_buy_dvsn_cd === "02" ? "매수" : "매도";
+                const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
+                const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
+                const emoji = side === "매수" ? "✅" : "🔻";
+                msg += `${emoji} *${sym}* ${side} 체결 완료!\n`;
+                msg += `   📊 ${fillQty}주 × $${parseFloat(fillPrice).toFixed(2)}\n\n`;
               }
-              await sendMessage(env, msg, REPLY_KEYBOARD);
-              // 장 마감 후라면 미체결 건 정리
-              if (etHour >= 16) {
-                msg += "\n⏰ _장 마감으로 미체결 주문은 자동 취소됩니다._";
-                await sendMessage(env, "⏰ *[장 마감 정리]*\n\n" +
-                  `✅ 체결 완료: ${filledSymbols.join(", ")}\n` +
-                  `❌ 미체결 (자동취소): ${unfilledSymbols.map(u => u.sym).join(", ")}\n\n` +
-                  "_미체결 종목은 지정가(+15%) 초과 급등으로 체결되지 못했습니다._", REPLY_KEYBOARD);
+
+              if (filledAll) {
+                msg += "🎉 _전종목 체결 완료!_";
+                await sendMessage(env, msg, REPLY_KEYBOARD);
+                await env.KV.delete("pending_fill_check");
+              } else {
+                // 부분 체결: 체결 알림 + 미체결 현황
+                msg += "⏳ *미체결 종목:*\n";
+                for (const u of unfilledSymbols) {
+                  msg += `  ⚠️ ${u.sym} — 체결 대기 중\n`;
+                }
+                await sendMessage(env, msg, REPLY_KEYBOARD);
+                // 미체결 건 계속 추적 (이미 알린 종목은 기록)
+                const updatedNotified = [...new Set([...alreadyNotified, ...newlyFilled])];
+                await env.KV.put("pending_fill_check", JSON.stringify({
+                  ...fillData,
+                  poll_count: pollCount,
+                  notified_symbols: updatedNotified,
+                }));
+              }
+            }
+
+            // ★ 장 마감 후 처리: 미체결 건 최종 정리
+            if (etHour >= 16 && etHour < 21) {
+              if (filledAll) {
+                // 이미 위에서 알림 보냄 → KV만 삭제
+                await env.KV.delete("pending_fill_check");
+              } else if (unfilledSymbols.length > 0) {
+                let closeMsg = "⏰ *[장 마감 정리]*\n━━━━━━━━━━━━━━━\n\n";
+                if (filledSymbols.length > 0) {
+                  closeMsg += `✅ 체결 완료: ${filledSymbols.join(", ")}\n`;
+                }
+                closeMsg += `❌ 미체결 (자동취소): ${unfilledSymbols.map(u => u.sym).join(", ")}\n\n`;
+                closeMsg += "_미체결 종목은 지정가(+15%) 초과 급등으로 체결되지 못했습니다._";
+                await sendMessage(env, closeMsg, REPLY_KEYBOARD);
+                await env.KV.delete("pending_fill_check");
+              } else if (filledSymbols.length === 0) {
+                // 주문 내역 자체가 0건인 경우
+                await sendMessage(env, "⚠️ *[장 마감]*\n\n오늘 주문 내역이 조회되지 않았습니다.\n💱 KIS 앱에서 직접 확인해 주세요, 대표님.", REPLY_KEYBOARD);
                 await env.KV.delete("pending_fill_check");
               }
-            } else if (etHour >= 16 && etHour < 21) {
-              // 전부 미체결 + 장 마감
-              let closeMsg = "🕒 *[장 마감 체결 확인]*\n━━━━━━━━━━━━━━━\n\n";
-              if (unfilledSymbols.length > 0) {
-                closeMsg += "⚠️ 전종목 미체결 (장 마감 자동 취소):\n";
-                for (const u of unfilledSymbols) {
-                  closeMsg += `  ❌ ${u.sym}\n`;
-                }
-                closeMsg += "\n_지정가 초과 급등으로 체결되지 못했습니다._";
-              } else {
-                closeMsg += "⚠️ 오늘 주문 내역이 조회되지 않았습니다.\n";
-              }
-              closeMsg += "\n💱 KIS 앱에서 직접 확인해 주세요, 대표님.";
-              await sendMessage(env, closeMsg, REPLY_KEYBOARD);
-              await env.KV.delete("pending_fill_check");
+            }
+
+            // ★ 장중인데 새로 체결된 것도 없으면 → KV에 폴링 카운트만 업데이트
+            if (newlyFilled.length === 0 && !(etHour >= 16 && etHour < 21)) {
+              await env.KV.put("pending_fill_check", JSON.stringify({
+                ...fillData, poll_count: pollCount,
+              }));
             }
           }
         }

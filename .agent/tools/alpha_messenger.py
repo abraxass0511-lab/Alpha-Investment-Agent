@@ -490,9 +490,25 @@ def report_daily_picks():
     held_symbols = _get_held_symbols()
     print(f"📋 현재 보유 종목: {held_symbols} ({len(held_symbols)}개)")
 
+    # ★ 리밸런싱 결과 먼저 로드 (매수 슬롯 판단용)
+    rebal_buy_symbols = []
+    rebal_sell_symbols = []
+    rebal_available_slots = 5  # 기본값
+    try:
+        rebal_path = "output_reports/rebalance_recommendations.json"
+        if os.path.exists(rebal_path):
+            with open(rebal_path, "r", encoding="utf-8") as f:
+                rebal_data_pre = json.load(f)
+            rebal_buy_symbols = [b["symbol"] for b in rebal_data_pre.get("buy", [])]
+            rebal_sell_symbols = [s["symbol"] for s in rebal_data_pre.get("sell", [])]
+            rebal_available_slots = rebal_data_pre.get("available_slots", 5)
+            print(f"📊 리밸런서 결과: 매도추천 {len(rebal_sell_symbols)}종목, 매수추천 {len(rebal_buy_symbols)}종목, 가용슬롯 {rebal_available_slots}")
+    except Exception as e:
+        print(f"⚠️ 리밸런싱 사전 로드 에러: {e}")
+
     analysis_section = "*🧠 심층 분석 결과 (최종 승인 대기)*\n"
-    buy_stocks = []       # 신규 매수 대상만
-    hold_stocks = []      # 이미 보유 중
+    buy_stocks = []       # 실제 신규 매수 대상 (리밸런서 슬롯 고려)
+    hold_stocks = []      # 이미 보유 중 (Top 5 내)
     
     if os.path.exists(picks_file) and os.path.getsize(picks_file) > 50:
         df = pd.read_csv(picks_file)
@@ -514,12 +530,18 @@ def report_daily_picks():
                 reason = row.get('Reason', '분석 중')
                 is_held = symbol in held_symbols
                 
+                # ★ 리밸런서 슬롯 제한 반영: 실제 매수 가능한 종목만 BUY
+                is_actual_buy = (not is_held) and (symbol in rebal_buy_symbols or rebal_available_slots > len(buy_stocks))
+
                 if is_held:
                     hold_stocks.append(symbol)
                     tag = "✅ HOLD"
-                else:
+                elif is_actual_buy:
                     buy_stocks.append(symbol)
                     tag = "🔥 BUY"
+                else:
+                    # 조건은 되지만 슬롯 부족 → 대기
+                    tag = "⏸️ WAIT (슬롯 부족)"
 
                 picks_content += f"*{idx}. {name} ({symbol})* {tag}\n"
                 # 상세 수치 표시 (대표님 판단용)
@@ -539,8 +561,8 @@ def report_daily_picks():
                 picks_content += f"   ⚡ 12-1 모멘텀: {mom_pct}%\n"
                 picks_content += f"   • `핵심근거`: {reason}\n"
 
-                # ★ Gemini AI 분석은 신규 매수 대상만 (보유 종목은 생략)
-                if not is_held:
+                # ★ Gemini AI 분석은 실제 신규 매수 대상만
+                if is_actual_buy and not is_held:
                     ai_comment = _gemini_stock_analysis(symbol, name, {
                         "시총(M)": mcap, "ROE(%)": roe_val, "현재가": price,
                         "50MA": ma50, "Surprise(%)": surprise, "EPS성장(%)": eps_g,
@@ -549,8 +571,10 @@ def report_daily_picks():
                     if ai_comment:
                         picks_content += f"   🧠 _{ai_comment}_\n"
                     time.sleep(10)  # Gemini RPM 한도 방지
-                else:
+                elif is_held:
                     picks_content += f"   💼 _이미 보유 중 — 기준 충족 확인 완료_\n"
+                else:
+                    picks_content += f"   ⏸️ _포트폴리오 슬롯 부족 — 매도 발생 시 교체 후보_\n"
 
                 picks_content += "\n"
             analysis_section += picks_content

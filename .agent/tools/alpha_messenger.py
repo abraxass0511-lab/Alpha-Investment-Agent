@@ -25,8 +25,9 @@ def get_qqq_drawdown():
         from datetime import timedelta
 
         qqq = yf.Ticker("QQQ")
-        # 최근 2년 데이터로 ATH 계산
-        hist = qqq.history(period="2y")
+        # 최근 2년 비조정(raw) 데이터로 ATH 계산
+        # ★ auto_adjust=False: 배당 조정 없는 실제 시장가격 사용 (차트와 동일)
+        hist = qqq.history(period="2y", auto_adjust=False)
         if hist.empty:
             print("⚠️ QQQ 데이터 비어있음")
             return None

@@ -1260,14 +1260,22 @@ async function handleDeposit(env) {
       const totalEval = holdings.reduce((sum, h) => {
         const qty = parseInt(h.ovrs_cblc_qty || "0");
         if (qty <= 0) return sum;
-        // ★ ovrs_stck_evlu_amt(해외주식평가금액)를 우선 사용 (KIS가 계산한 정확한 값)
+        // 1순위: now_pric2 * qty (실시간 현재가 × 수량 = USD 평가액)
+        const curPrice = parseFloat(h.now_pric2 || "0");
+        if (curPrice > 0) {
+          return sum + curPrice * qty;
+        }
+        // 2순위: ovrs_stck_evlu_amt (해외주식평가금액, USD)
         const evalAmt = parseFloat(h.ovrs_stck_evlu_amt || "0");
         if (evalAmt > 0) return sum + evalAmt;
-        // fallback: now_pric2 * qty (장 외 시간 등 부정확할 수 있음)
-        return sum + parseFloat(h.now_pric2 || "0") * qty;
+        // 3순위: frcr_pchs_amt1 (외화매입금액, 원금 기준 — 장 외 시간 fallback)
+        const purchaseAmt = parseFloat(h.frcr_pchs_amt1 || "0");
+        if (purchaseAmt > 0) return sum + purchaseAmt;
+        return sum;
       }, 0);
       const totalAsset = totalEval + parseFloat(usd);
       cashRatio = totalAsset > 0 ? (parseFloat(usd) / totalAsset * 100) : 100;
+      console.log(`💰 예수금: $${usd}, 주식평가: $${totalEval.toFixed(2)}, 총자산: $${totalAsset.toFixed(2)}, 현금비중: ${cashRatio.toFixed(1)}%`);
     }
 
     let advice = "\ud83d\udee1\ufe0f \ub300\ubd80\ubd84 \ud604\uae08 \ubcf4\uc720 \uc911\uc785\ub2c8\ub2e4. \uc548\uc804\ud55c \uc0c1\ud0dc\uc785\ub2c8\ub2e4!";

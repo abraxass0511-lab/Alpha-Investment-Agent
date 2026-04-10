@@ -1256,33 +1256,51 @@ async function handleDeposit(env) {
     const holdings = await getBalance(env);
     
     let cashRatio = 100;
+    let stockEval = 0;
+    let totalAsset = parseFloat(usd);
+    let stockCount = 0;
+
     if (holdings && holdings.length > 0) {
-      const totalEval = holdings.reduce((sum, h) => {
+      stockEval = holdings.reduce((sum, h) => {
         const qty = parseInt(h.ovrs_cblc_qty || "0");
         if (qty <= 0) return sum;
+        stockCount++;
         // 1순위: now_pric2 * qty (실시간 현재가 × 수량 = USD 평가액)
         const curPrice = parseFloat(h.now_pric2 || "0");
         if (curPrice > 0) {
+          console.log(`  ${h.ovrs_pdno}: now_pric2=$${curPrice} × ${qty} = $${(curPrice * qty).toFixed(2)}`);
           return sum + curPrice * qty;
         }
         // 2순위: ovrs_stck_evlu_amt (해외주식평가금액, USD)
         const evalAmt = parseFloat(h.ovrs_stck_evlu_amt || "0");
-        if (evalAmt > 0) return sum + evalAmt;
-        // 3순위: frcr_pchs_amt1 (외화매입금액, 원금 기준 — 장 외 시간 fallback)
+        if (evalAmt > 0) {
+          console.log(`  ${h.ovrs_pdno}: ovrs_stck_evlu_amt=$${evalAmt}`);
+          return sum + evalAmt;
+        }
+        // 3순위: frcr_pchs_amt1 (외화매입금액, 원금 기준)
         const purchaseAmt = parseFloat(h.frcr_pchs_amt1 || "0");
-        if (purchaseAmt > 0) return sum + purchaseAmt;
+        if (purchaseAmt > 0) {
+          console.log(`  ${h.ovrs_pdno}: frcr_pchs_amt1=$${purchaseAmt} (fallback)`);
+          return sum + purchaseAmt;
+        }
+        console.log(`  ${h.ovrs_pdno}: 모든 금액 필드 0 — 평가 불가`);
         return sum;
       }, 0);
-      const totalAsset = totalEval + parseFloat(usd);
+      totalAsset = stockEval + parseFloat(usd);
       cashRatio = totalAsset > 0 ? (parseFloat(usd) / totalAsset * 100) : 100;
-      console.log(`💰 예수금: $${usd}, 주식평가: $${totalEval.toFixed(2)}, 총자산: $${totalAsset.toFixed(2)}, 현금비중: ${cashRatio.toFixed(1)}%`);
+      console.log(`💰 예수금: $${usd}, 주식평가: $${stockEval.toFixed(2)}, 총자산: $${totalAsset.toFixed(2)}, 현금비중: ${cashRatio.toFixed(1)}%`);
     }
 
     let advice = "\ud83d\udee1\ufe0f \ub300\ubd80\ubd84 \ud604\uae08 \ubcf4\uc720 \uc911\uc785\ub2c8\ub2e4. \uc548\uc804\ud55c \uc0c1\ud0dc\uc785\ub2c8\ub2e4!";
     if (cashRatio < 50) advice = "\ud83d\udcc8 \ud22c\uc790 \ube44\uc911\uc774 \ub192\uc2b5\ub2c8\ub2e4. \uc2dc\uc7a5 \ubcc0\ub3d9\uc5d0 \uc720\uc758\ud574 \uc8fc\uc138\uc694.";
     else if (cashRatio < 80) advice = "\u2696\ufe0f \uc801\uc808\ud55c \ud604\uae08 \ube44\uc911\uc744 \uc720\uc9c0\ud558\uace0 \uc788\uc2b5\ub2c8\ub2e4.";
 
-    return "\ud83d\udcb5 *\uc608\uc218\uae08 \ud604\ud669*\n\n\ud83d\udcb0 \uc989\uc2dc \ub9e4\uc218 \uac00\ub2a5: *$" + usd + "*\n\ud83d\udcca \ud604\uae08 \ube44\uc911: " + cashRatio.toFixed(0) + "%\n\n" + advice;
+    let msg = "\ud83d\udcb5 *\uc608\uc218\uae08 \ud604\ud669*\n\n";
+    msg += "\ud83d\udcb0 \uc989\uc2dc \ub9e4\uc218 \uac00\ub2a5: *$" + usd + "*\n";
+    msg += "\ud83d\udcc8 \uc8fc\uc2dd\ud3c9\uac00\uc561: $" + stockEval.toFixed(2) + " (" + stockCount + "\uc885\ubaa9)\n";
+    msg += "\ud83c\udfe6 \ucd1d\uc790\uc0b0: $" + totalAsset.toFixed(2) + "\n";
+    msg += "\ud83d\udcca \ud604\uae08 \ube44\uc911: *" + cashRatio.toFixed(0) + "%*\n\n" + advice;
+    return msg;
   } catch (e) {
     return "\u26a0\ufe0f \uc870\ud68c \uc5d0\ub7ec: " + e.message;
   }

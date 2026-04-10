@@ -880,7 +880,7 @@ def report_reference_indicators():
         stage_text, stage_num = _qqq_invest_stage(qqq['drawdown_pct'])
         msg += (
             f"📊 *QQQ 고점 대비 하락률 현황*\n"
-            f"└ 최근 고점 (ATH): *${qqq['ath']}* ({qqq['ath_date']} 기록)\n"
+            f"└ 최고점 (ATH): *${qqq['ath']}* ({qqq['ath_date']} 기록)\n"
             f"└ 현재가: *${qqq['current']}*\n"
             f"└ 현재 하락률: *{qqq['drawdown_pct']:+.2f}%*\n"
             f"└ {stage_text}\n"

@@ -82,9 +82,40 @@ export default {
           });
           results.buying_power_raw = await bpR.json();
 
-          // Check KV pending sell
+          // ★ 체결내역 RAW 조회 (필드명 검증용)
+          const fillUrl = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/inquire-ccnl`;
+          const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+          const kstDate = kstNow.toISOString().slice(0, 10).replace(/-/g, "");
+          const fillParams = new URLSearchParams({
+            CANO: env.KIS_CANO, ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+            PDNO: "", ORD_STRT_DT: kstDate, ORD_END_DT: kstDate,
+            SLL_BUY_DVSN: "00", CCLD_NCCS_DVSN: "00",
+            OVRS_EXCG_CD: "", SORT_SQN: "DS",
+            ORD_DT: "", ORD_GNO_BRNO: "", ODNO: "",
+            CTX_AREA_NK200: "", CTX_AREA_FK200: "",
+          });
+          const fillR = await fetch(`${fillUrl}?${fillParams}`, {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+              appkey: env.KIS_APP_KEY, appsecret: env.KIS_SECRET_KEY,
+              "tr_id": "VTTS3035R",
+            },
+          });
+          results.fills_raw = await fillR.json();
+          results.fills_query_date = kstDate;
+
+          // ★ 첫 번째 체결 레코드의 필드명 표시 (디버깅용)
+          if (results.fills_raw.output && results.fills_raw.output.length > 0) {
+            results.fills_first_record_keys = Object.keys(results.fills_raw.output[0]);
+            results.fills_first_record = results.fills_raw.output[0];
+          }
+
+          // Check KV states
           if (env.KV) {
             results.pending_sell = await env.KV.get("pending_sell");
+            results.pending_fill_check = await env.KV.get("pending_fill_check");
+            results.pending_approval = await env.KV.get("pending_approval");
           }
         }
         
@@ -272,9 +303,10 @@ export default {
               for (const ord of relevantOrders) {
                 const sym = ord.pdno || ord.ovrs_pdno || "?";
                 const side = ord.sll_buy_dvsn_cd === "02" ? "매수" : "매도";
-                const ordQty = parseInt(ord.ord_qty || ord.ft_ord_qty || "0");
-                const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
-                const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
+                const ordQty = parseInt(ord.ft_ord_qty || ord.ord_qty || "0");
+                // ★ ft_ 접두사 필드 우선 (모의투자 API는 ft_ 필드 사용)
+                const fillQty = parseInt(ord.ft_ccld_qty || ord.ccld_qty || ord.tot_ccld_qty || "0");
+                const fillPrice = ord.ft_ccld_unpr3 || ord.avg_prvs || ord.avg_prc || "0";
 
                 if (fillQty > 0) {
                   filledSymbols.push(sym);
@@ -310,8 +342,9 @@ export default {
                 const sym = ord.pdno || ord.ovrs_pdno || "?";
                 if (!newlyFilled.includes(sym)) continue;
                 const side = ord.sll_buy_dvsn_cd === "02" ? "매수" : "매도";
-                const fillQty = parseInt(ord.ccld_qty || ord.ft_ccld_qty || ord.tot_ccld_qty || "0");
-                const fillPrice = ord.avg_prvs || ord.ft_ccld_unpr3 || "0";
+                // ★ ft_ 접두사 필드 우선 (모의투자 API는 ft_ 필드 사용)
+                const fillQty = parseInt(ord.ft_ccld_qty || ord.ccld_qty || ord.tot_ccld_qty || "0");
+                const fillPrice = ord.ft_ccld_unpr3 || ord.avg_prvs || ord.avg_prc || "0";
                 const emoji = side === "매수" ? "✅" : "🔻";
                 msg += `${emoji} *${sym}* ${side} 체결 완료!\n`;
                 msg += `   📊 ${fillQty}주 × $${parseFloat(fillPrice).toFixed(2)}\n\n`;
@@ -338,8 +371,8 @@ export default {
               }
             }
 
-            // ★ 장 마감 후 처리: 미체결 건 최종 정리
-            if (etHour >= 16 && etHour < 21) {
+            // ★ 장 마감 후 처리: 미체결 건 최종 정리 (체결 알림을 이미 보냈으면 중복 방지)
+            else if (etHour >= 16 && etHour < 21) {
               if (filledAll) {
                 // 이미 위에서 알림 보냄 → KV만 삭제
                 await env.KV.delete("pending_fill_check");
@@ -1054,11 +1087,15 @@ async function executeApproval(env) {
     // 표시: 매수 먼저, 매도 나중에
     msg += buyMsg + sellMsg;
 
-    // 주문한 종목 목록 수집 (체결 확인용)
-    const orderedSymbols = [
-      ...sellStocks.map(s => s.symbol),
-      ...buyStocks.map(s => s.symbol),
-    ];
+    // ★ 성공한 종목만 체결 확인 대상 (실패한 주문은 추적 불필요)
+    const orderedSymbols = [];
+    // msg에서 ✅ 포함된 종목만 추출
+    const allStocks = [...sellStocks, ...buyStocks];
+    for (const s of allStocks) {
+      if (msg.includes(`✅ ${s.symbol}`)) {
+        orderedSymbols.push(s.symbol);
+      }
+    }
 
     return { msg, orderedSymbols, successCount };
   } catch (e) {

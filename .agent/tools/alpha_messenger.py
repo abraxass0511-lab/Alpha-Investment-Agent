@@ -231,6 +231,38 @@ def _get_holdings_fallback_kis():
         return []
 
 
+def _get_held_symbols():
+    """현재 보유 종목 심볼 목록만 반환합니다 (보고서 매수/보유 판단용)."""
+    try:
+        worker_url = os.getenv("WORKER_URL", "")
+        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+        if not worker_url:
+            return []
+
+        r = requests.get(
+            f"{worker_url}/api/portfolio",
+            headers={"Authorization": f"Bearer {worker_key}"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return []
+
+        data = r.json()
+        holdings = data.get("holdings", [])
+        api_error = data.get("api_error", False)
+
+        # Worker 실패 시 KIS 직접 폴백
+        if api_error or not holdings:
+            fallback = _get_holdings_fallback_kis()
+            if fallback:
+                holdings = fallback
+
+        return [h.get("symbol", "?") for h in holdings if h.get("qty", 0) > 0]
+    except Exception as e:
+        print(f"⚠️ 보유종목 심볼 조회 에러: {e}")
+        return []
+
+
 def get_portfolio_section():
     """보유종목 현황과 예수금을 Cloudflare Worker 경유로 조회합니다."""
     try:
@@ -454,8 +486,13 @@ def report_daily_picks():
     
     summary_table += api_warning_section
 
+    # ★ 보유 종목 확인 → 신규 매수 대상만 BUY 표시
+    held_symbols = _get_held_symbols()
+    print(f"📋 현재 보유 종목: {held_symbols} ({len(held_symbols)}개)")
+
     analysis_section = "*🧠 심층 분석 결과 (최종 승인 대기)*\n"
-    buy_stocks = []
+    buy_stocks = []       # 신규 매수 대상만
+    hold_stocks = []      # 이미 보유 중
     
     if os.path.exists(picks_file) and os.path.getsize(picks_file) > 50:
         df = pd.read_csv(picks_file)
@@ -469,12 +506,22 @@ def report_daily_picks():
             analysis_section += "❌ *조건 부합 종목(양수 모멘텀) 없음*\n\n"
         else:
             picks_content = ""
+            idx = 0
             for i, row in df_final.iterrows():
+                idx += 1
                 symbol = row['Symbol']
                 name = row.get('Name', symbol)
                 reason = row.get('Reason', '분석 중')
-                buy_stocks.append(symbol)
-                picks_content += f"*{len(buy_stocks)}. {name} ({symbol})* 🔥 [BUY]\n"
+                is_held = symbol in held_symbols
+                
+                if is_held:
+                    hold_stocks.append(symbol)
+                    tag = "✅ HOLD"
+                else:
+                    buy_stocks.append(symbol)
+                    tag = "🔥 BUY"
+
+                picks_content += f"*{idx}. {name} ({symbol})* {tag}\n"
                 # 상세 수치 표시 (대표님 판단용)
                 mcap = row.get('MarketCap_M', 0)
                 roe_val = row.get('ROE(%)', 0)
@@ -491,16 +538,21 @@ def report_daily_picks():
                 picks_content += f"   🔬 Surprise: {surprise}% | Growth: {growth_str}\n"
                 picks_content += f"   ⚡ 12-1 모멘텀: {mom_pct}%\n"
                 picks_content += f"   • `핵심근거`: {reason}\n"
-                # Gemini AI 종목별 분석
-                ai_comment = _gemini_stock_analysis(symbol, name, {
-                    "시총(M)": mcap, "ROE(%)": roe_val, "현재가": price,
-                    "50MA": ma50, "Surprise(%)": surprise, "EPS성장(%)": eps_g,
-                    "12-1모멘텀(%)": mom_pct, "매수근거": reason,
-                })
-                if ai_comment:
-                    picks_content += f"   🧠 _{ai_comment}_\n"
+
+                # ★ Gemini AI 분석은 신규 매수 대상만 (보유 종목은 생략)
+                if not is_held:
+                    ai_comment = _gemini_stock_analysis(symbol, name, {
+                        "시총(M)": mcap, "ROE(%)": roe_val, "현재가": price,
+                        "50MA": ma50, "Surprise(%)": surprise, "EPS성장(%)": eps_g,
+                        "12-1모멘텀(%)": mom_pct, "매수근거": reason,
+                    })
+                    if ai_comment:
+                        picks_content += f"   🧠 _{ai_comment}_\n"
+                    time.sleep(10)  # Gemini RPM 한도 방지
+                else:
+                    picks_content += f"   💼 _이미 보유 중 — 기준 충족 확인 완료_\n"
+
                 picks_content += "\n"
-                time.sleep(10)  # Gemini RPM 한도 방지 (분당 10건 → 10초 간격)
             analysis_section += picks_content
     else:
         analysis_section += "❌ *조건 부합 종목 없음*\n\n"
@@ -569,8 +621,17 @@ def report_daily_picks():
         final_result += " • \"승인\" → 매도/매수 자동 집행\n"
         final_result += " • \"반려\" → 현재 포트폴리오 유지\n\n"
     elif buy_stocks:
-        final_result = f"*🎯 최종 결과*\n • 선정된 {len(buy_stocks)}개 종목에 대해 자산의 *5%* 분산 매수 추천.\n"
+        # 신규 매수 대상이 있는 경우
+        final_result = f"*🎯 최종 결과*\n"
+        if hold_stocks:
+            final_result += f" • 보유 유지: {len(hold_stocks)}종목 ({', '.join(hold_stocks)}) — 기준 충족 ✅\n"
+        final_result += f" • 신규 매수 추천: *{len(buy_stocks)}종목* ({', '.join(buy_stocks)}) — 자산의 *5%* 분산 매수\n"
         final_result += " • \"승인\" → 자동 매수 / \"반려\" → 매수 취소\n\n"
+    elif hold_stocks and not buy_stocks:
+        # 모든 추천 종목을 이미 보유 중 → 신규 매수 없음
+        final_result = f"*🎯 최종 결과*\n"
+        final_result += f" • 보유 유지: {len(hold_stocks)}종목 모두 기준 충족 ✅\n"
+        final_result += " • 🛡️ *신규 매수 없음* — 현 포트폴리오 유지 권고\n\n"
     else:
         final_result = "*🎯 최종 결과*\n*🛡️ 가디언 조치*: 정밀 필터링(0.7) 기준 미달. **전액 현금 보유 권고.**\n\n"
 

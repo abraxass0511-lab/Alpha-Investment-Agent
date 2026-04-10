@@ -18,6 +18,129 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 _gemini_fail_count = 0
 
 
+def get_qqq_drawdown():
+    """QQQ ETF 고점 대비 하락률 조회 (yfinance 사용)"""
+    try:
+        import yfinance as yf
+        from datetime import timedelta
+
+        qqq = yf.Ticker("QQQ")
+        # 최근 2년 데이터로 ATH 계산
+        hist = qqq.history(period="2y")
+        if hist.empty:
+            print("⚠️ QQQ 데이터 비어있음")
+            return None
+
+        # NaN 제거 후 계산
+        hist = hist.dropna(subset=["High", "Close"])
+        if hist.empty:
+            return None
+
+        ath = hist["High"].max()
+        ath_date = hist["High"].idxmax()
+        current_price = hist["Close"].iloc[-1]
+        drawdown_pct = ((current_price - ath) / ath) * 100
+
+        # ATH 날짜 포맷
+        ath_date_str = ath_date.strftime("%Y년 %m월")
+
+        print(f"✅ QQQ 하락률 조회 성공: ATH ${ath:.2f} ({ath_date_str}) → 현재 ${current_price:.2f} ({drawdown_pct:+.2f}%)")
+        return {
+            "ath": round(ath, 2),
+            "ath_date": ath_date_str,
+            "current": round(current_price, 2),
+            "drawdown_pct": round(drawdown_pct, 2),
+        }
+    except Exception as e:
+        print(f"⚠️ QQQ 하락률 조회 에러: {e}")
+        return None
+
+
+def _qqq_invest_stage(drawdown_pct):
+    """QQQ 하락률 기반 현금 투입 단계 판단"""
+    if drawdown_pct <= -40:
+        return "🔴 3차 투입 완료 구간 (현금 1/3 사용)", 3
+    elif drawdown_pct <= -30:
+        return "🟠 2차 투입 구간 (현금 1/3 사용)", 2
+    elif drawdown_pct <= -20:
+        return "🟡 1차 투입 구간 (현금 1/3 사용)", 1
+    else:
+        return "🟢 대기 구간", 0
+
+
+def get_buffett_indicator():
+    """버핏지표(Buffett Indicator) 조회: 미국 시가총액/GDP 비율
+    1차: 구루포커스, 2차: currentmarketvaluation.com
+    """
+    # ── 1차: 구루포커스 (TMC/GDP current: XXX 패턴) ──
+    try:
+        import re
+        r = requests.get(
+            "https://www.gurufocus.com/stock-market-valuations.php",
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            timeout=15,
+        )
+        if r.status_code == 200:
+            # 페이지 소스에서 TMC/GDP (current: 216.2) 같은 패턴 추출
+            match = re.search(r"TMC/GDP\s*\(current:\s*([\d.]+)\)", r.text)
+            if match:
+                ratio = float(match.group(1))
+                print(f"✅ 버핏지표 조회 성공 (구루포커스): {ratio}%")
+                return {"ratio": ratio, "source": "GuruFocus"}
+            # 다른 패턴도 시도: "Total Market Index is currently at XXX%"
+            match2 = re.search(r'(?:ratio|indicator).*?(\d{2,3}\.\d)\s*%', r.text, re.IGNORECASE)
+            if match2:
+                ratio = float(match2.group(1))
+                print(f"✅ 버핏지표 조회 성공 (구루포커스 대체패턴): {ratio}%")
+                return {"ratio": ratio, "source": "GuruFocus"}
+    except Exception as e:
+        print(f"⚠️ 버핏지표 구루포커스 에러: {e}")
+
+    # ── 2차: currentmarketvaluation.com ──
+    try:
+        import re
+        r = requests.get(
+            "https://currentmarketvaluation.com/models/buffett-indicator.php",
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "text/html",
+            },
+            timeout=15,
+        )
+        if r.status_code == 200:
+            # "Buffett Indicator = $72.14T / $31.33T = 230%" 패턴
+            match = re.search(r'Buffett\s+Indicator\s*=.*?=\s*(\d{2,3})%', r.text)
+            if match:
+                ratio = float(match.group(1))
+                print(f"✅ 버핏지표 조회 성공 (CMV): {ratio}%")
+                return {"ratio": ratio, "source": "CMV"}
+            # OG description에서 추출: "75.15% higher than its historical average"
+            match2 = re.search(r'current.*?value.*?(\d{2,3})%', r.text, re.IGNORECASE)
+            if match2:
+                ratio = float(match2.group(1))
+                print(f"✅ 버핏지표 조회 성공 (CMV 대체패턴): {ratio}%")
+                return {"ratio": ratio, "source": "CMV"}
+    except Exception as e:
+        print(f"⚠️ 버핏지표 CMV 에러: {e}")
+
+    print("❌ 버핏지표 조회 실패 (모든 소스)")
+    return None
+
+
+def _buffett_strategy(ratio):
+    """버핏지표 기반 포트폴리오 전략 판단"""
+    if ratio > 170:
+        return "주식 60% / 현금 40%", "🔴"
+    elif ratio >= 140:
+        return "주식 80% / 현금 20%", "🟠"
+    else:
+        return "주식 100%", "🟢"
+
+
 def get_fear_greed_index():
     """CNN Fear & Greed Index 조회 (0~100)"""
     try:
@@ -704,24 +827,7 @@ def report_daily_picks():
     if _now.year == 2027 and _now.month == 12:
         footer += "\n\n🚨 *[관리자 알림] 2028년도 미국장 휴장일 달력 업데이트가 필요합니다! 저(알파)에게 갱신을 요청해 주세요.*"
 
-    # ── 참고 지표: CNN Fear & Greed Index ──
-    fear_greed_section = ""
-    fg = get_fear_greed_index()
-    if fg:
-        fear_greed_section = (
-            f"\n\n━━━━━━━━━\n"
-            f"📡 *참고 지표*\n"
-            f"{fg['emoji']} 공포·탐욕 지수: *{fg['score']}* ({fg['label']})\n"
-            f"└ 0~25 극도의 공포 | 26~44 공포 | 45~55 중립 | 56~74 탐욕 | 75~100 극도의 탐욕"
-        )
-    else:
-        fear_greed_section = (
-            "\n\n━━━━━━━━━\n"
-            "📡 *참고 지표*\n"
-            "⚠️ 공포·탐욕 지수 조회 실패"
-        )
-
-    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + footer + fear_greed_section + "\n\n" + portfolio_section
+    message = title + target_info + summary_table + analysis_section + rebalance_section + final_result + footer + "\n\n" + portfolio_section
     
     # 3. 로컬 파일 저장 (메모장 대용)
     if not os.path.exists("output_reports"): os.makedirs("output_reports")
@@ -741,8 +847,67 @@ def report_daily_picks():
     except:
         pass
 
+def report_reference_indicators():
+    """참고 지표 별도 발송 (버핏지표 + QQQ 하락률 + 공포·탐욕 지수)"""
+    from datetime import datetime
+    now_str = datetime.now().strftime("%Y.%m.%d")
+
+    print("\n" + "=" * 50)
+    print(f"📡 참고 지표 조회 시작 ({now_str})")
+    print("=" * 50)
+
+    bi = get_buffett_indicator()
+    qqq = get_qqq_drawdown()
+    fg = get_fear_greed_index()
+
+    msg = f"📡 *참고 지표 현황* ({now_str})\n"
+    msg += "━━━━━━━━━\n\n"
+
+    # 버핏지표
+    if bi:
+        strategy, bi_emoji = _buffett_strategy(bi['ratio'])
+        msg += (
+            f"{bi_emoji} *버핏지표: {bi['ratio']:.1f}%*\n"
+            f"└ 권장 비중: {strategy}\n"
+            f"└ 140%미만 주식100% | 140~170% 주식80/현금20 | 170%초과 주식60/현금40\n\n"
+        )
+    else:
+        msg += "⚠️ 버핏지표 조회 실패\n\n"
+
+    # QQQ 고점 대비 하락률
+    if qqq:
+        stage_text, stage_num = _qqq_invest_stage(qqq['drawdown_pct'])
+        msg += (
+            f"📊 *QQQ 고점 대비 하락률 현황*\n"
+            f"└ 최근 고점 (ATH): *${qqq['ath']}* ({qqq['ath_date']} 기록)\n"
+            f"└ 현재가: *${qqq['current']}*\n"
+            f"└ 현재 하락률: *{qqq['drawdown_pct']:+.2f}%*\n"
+            f"└ {stage_text}\n"
+            f"└ -20% 1차투입(현금 1/3) | -30% 2차투입(현금 1/3) | -40% 3차투입(현금 1/3)\n\n"
+        )
+    else:
+        msg += "⚠️ QQQ 하락률 조회 실패\n\n"
+
+    # 공포·탐욕 지수
+    if fg:
+        msg += (
+            f"{fg['emoji']} *공포·탐욕 지수: {fg['score']}* ({fg['label']})\n"
+            f"└ 0~25 극도의 공포 | 26~44 공포 | 45~55 중립 | 56~74 탐욕 | 75~100 극도의 탐욕\n\n"
+        )
+    else:
+        msg += "⚠️ 공포·탐욕 지수 조회 실패\n\n"
+
+    msg += "_투자 참고용 지표이며, 실제 매매 판단은 대표님의 결정에 달려있습니다._"
+
+    send_telegram_message(msg)
+    print(f"✅ 참고 지표 발송 완료!")
+
+
 if __name__ == "__main__":
-    # 메신저는 스캐너가 만든 결과를 발송하는 역할.
-    # 휴장일 판단은 워크플로우 cron(월~금)이 담당하므로, 메신저는 결과가 있으면 무조건 발송.
-    # 수동 실행(workflow_dispatch) 시에도 정상 동작 보장.
-    report_daily_picks()
+    import sys
+    # 인자에 따라 모드 분기: "indicators" → 참고지표만 발송
+    if len(sys.argv) > 1 and sys.argv[1] == "indicators":
+        report_reference_indicators()
+    else:
+        # 기본: 종목분석 보고서 발송
+        report_daily_picks()

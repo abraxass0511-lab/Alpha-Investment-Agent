@@ -1,0 +1,37 @@
+name: Alpha Reference Indicators
+
+on:
+  schedule:
+    - cron: '0 21 * * 1-5' # 미국장 마감 후 한국 시간 오전 6시 (21:00 UTC) — 보고서와 동일
+  workflow_dispatch:  # 수동 실행 (텔레그램 "지표" 명령용)
+
+# ★ 동시 실행 방지
+concurrency:
+  group: alpha-indicators
+  cancel-in-progress: true
+
+jobs:
+  send-indicators:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Send Reference Indicators
+      run: python .agent/tools/alpha_messenger.py indicators

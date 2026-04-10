@@ -635,7 +635,10 @@ async function getBalance(env, _retry = false) {
   let allHoldings = [];
   let tokenExpired = false;
 
-  for (const excg of exchanges) {
+  for (let i = 0; i < exchanges.length; i++) {
+    const excg = exchanges[i];
+    // ★ KIS 모의투자 API 초당 호출 제한 방지 — 거래소 간 500ms 대기
+    if (i > 0) await sleep(500);
     try {
       const params = new URLSearchParams({
         CANO: env.KIS_CANO,
@@ -1249,11 +1252,16 @@ async function handleStockReturn(env) {
 
 async function handleDeposit(env) {
   try {
+    // ★ getBalance를 먼저 호출 (3개 거래소 순회 = 3번 API 호출)
+    const holdings = await getBalance(env);
+
+    // KIS 모의투자 API 초당 호출 제한 방지 — 잔고 조회 후 1초 대기
+    await sleep(1000);
+
     const bp = await getBuyingPower(env);
     if (!bp) return "\u26a0\ufe0f \uc608\uc218\uae08 \uc870\ud68c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4.";
 
     const usd = bp.ord_psbl_frcr_amt || "0";
-    const holdings = await getBalance(env);
     
     let cashRatio = 100;
     let stockEval = 0;

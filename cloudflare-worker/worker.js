@@ -275,6 +275,39 @@ export default {
           // ★ 이미 알림 보낸 종목 추적 (중복 알림 방지)
           const alreadyNotified = fillData.notified_symbols || [];
 
+          // ★★★ 핵심 수정: stale 체결확인 자동 정리 ★★★
+          // 주문 날짜(KST)가 오늘(KST)과 다르면 → 하루 넘은 stale 데이터
+          const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+          const todayKst = kstNow.toISOString().slice(0, 10);
+          if (orderDateKst && orderDateKst !== todayKst) {
+            // 잔고에서 해당 종목 보유 여부로 체결 판단
+            const symbols = fillData.symbols || [];
+            const holdings = await getBalance(env);
+            const heldSymbols = (holdings || [])
+              .filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0)
+              .map(h => h.ovrs_pdno || "");
+            const filled = symbols.filter(s => heldSymbols.includes(s));
+            const notFilled = symbols.filter(s => !heldSymbols.includes(s));
+
+            let staleMsg = "📊 *[체결 확인 완료]*\n━━━━━━━━━━━━━━━\n\n";
+            staleMsg += `📅 주문일: ${orderDateKst}\n\n`;
+            if (filled.length > 0) {
+              staleMsg += `✅ 체결 확인: ${filled.join(", ")}\n`;
+              staleMsg += "_잔고에서 보유 확인됨_\n\n";
+            }
+            if (notFilled.length > 0) {
+              staleMsg += `❌ 미체결: ${notFilled.join(", ")}\n`;
+            }
+            if (filled.length === 0 && notFilled.length === 0) {
+              staleMsg += "⚠️ 추적 종목 정보 없음\n";
+            }
+            staleMsg += "\n_실시간 알림이 지연되어 잔고 기반으로 확인했습니다._";
+            await sendMessage(env, staleMsg, REPLY_KEYBOARD);
+            await env.KV.delete("pending_fill_check");
+            // stale 정리 완료 → 아래 로직 스킵
+          } else {
+          // ★ 정상 플로우: 오늘 주문건 체결 확인
+
           const orders = await checkOrderFills(env, orderDateKst);
 
           if (!orders) {
@@ -398,7 +431,8 @@ export default {
                 ...fillData, poll_count: pollCount,
               }));
             }
-          }
+            }
+          } // end else (정상 플로우)
         }
       }
 

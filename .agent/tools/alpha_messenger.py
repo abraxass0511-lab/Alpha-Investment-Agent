@@ -462,10 +462,10 @@ def report_daily_picks():
     s5 = meta.get('step5', 0)
 
     summary_table = "\n*📊 필터 현황 요약 (통과 기준)*\n"
-    summary_table += f"| 1+2단계 | 체급+내실 | {s12}건 | 시총$10B+ ROE15%+ | Finnhub |\n"
-    summary_table += f"| 3단계 | 에너지 | {s3}건 | 가격 > 50MA | Finnhub |\n"
-    summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | Finnhub |\n"
-    summary_table += f"| 5단계 | Elite 5 | {s5}건 | 12-1 모멘텀 Top5 | Finnhub |\n\n"
+    summary_table += f"| 1+2단계 | 체급+내실 | {s12}건 | 시총$10B+ ROE15%+ | Finnhub+Yahoo |\n"
+    summary_table += f"| 3단계 | 에너지 | {s3}건 | 가격 > 50MA | Yahoo |\n"
+    summary_table += f"| 4단계 | 성장 | {s4}건 | Surprise 10%+ | Finnhub+Yahoo |\n"
+    summary_table += f"| 5단계 | Elite 5 | {s5}건 | 12-1 모멘텀 Top5 | Yahoo |\n\n"
 
     # ── API 장애 경고 섹션 (5단계 모멘텀 API 실패) ──
     api_warnings = []
@@ -679,7 +679,7 @@ def report_daily_picks():
     # ── 비고 (절대 규칙 7번: 실제로 모든 데이터를 받았을 때만 "모든 정보 받음" 표시) ──
     has_api_issues = (s5_api_fail > 0 or gemini_fails > 0)
     if meta.get("success_all", False) and not has_api_issues:
-        footer = "📝 _비고 : Finnhub에서 모든 정보 수집 완료_"
+        footer = "📝 _비고 : Finnhub+Yahoo에서 모든 정보 수집 완료_"
     elif meta.get("success_all", False) and has_api_issues:
         issue_parts = []
         if s5_api_fail > 0:

@@ -12,15 +12,15 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 | 단계 | 미션 (Mission) | 상세 통과 기준 (Pass Criteria) | 데이터 소스 (Source) |
 | :--- | :--- | :--- | :--- |
 | **1+2단계** | **체급+내실 (Size+Quality)** | **시가총액 $10B 이상, ROE 15% 이상** | Finnhub |
-| **3단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | Finnhub |
+| **3단계** | **에너지 (Momentum)** | **현재가 > 50일 이동평균선** | Yahoo/Stooq |
 | **4단계** | **성장 (Growth)** | **Surprise ≥ 10% OR EPS Growth ≥ 20%** | Finnhub API |
-| **5단계** | **모멘텀 Elite 5** | **12-1개월 모멘텀 양수 + 상위 5개** | Finnhub Candle |
+| **5단계** | **모멘텀 Elite 5** | **12-1개월 모멘텀 양수 + 상위 5개** | Yahoo/Stooq |
 
 ## ⚙️ Operational Strategy
 
 ### **데이터 무결성 (Data Integrity)**
-*   **Finnhub 전용 엔진**: 전 단계 데이터 수집은 Finnhub으로 처리합니다.
-*   **Yahoo Finance 폴백**: 모멘텀 계산 시 Finnhub 실패 시 Yahoo Finance로 자동 전환합니다.
+*   **Finnhub 전용 엔진**: 재무 데이터(1,2,4단계)는 Finnhub API로 처리합니다.
+*   **Yahoo Finance 전면 승격**: 주가 캔들 데이터(3,5단계)는 Finnhub의 403 에러 제약으로 인해 Yahoo Finance를 1차 메인으로 설정하고, 실패 시 Stooq, Google Finance로 3중 폴백(Fallback) 방어망을 가동합니다.
 *   **배치 누락 복구**: 배치 응답에서 누락된 종목은 **2회 개별 재시도** 후에만 탈락 처리합니다.
 
 ### **자동 리포팅 & 스케줄링**
@@ -48,6 +48,49 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
     * `us_market_calendar.py` — 미국 휴장일 캘린더
 *   **Output Directory**: `output_reports/` (daily_scan_latest.csv, final_picks_latest.csv, metadata.json)
 *   **Cloudflare Worker**: `cloudflare-worker/worker.js` (포트폴리오 API 프록시)
+
+---
+
+## 🚨 디버깅 & 코드 수정 절대 규칙 (FACT-FIRST — 반드시 준수)
+
+> **이 규칙은 Cloudflare Worker, KIS API 연동, 체결 확인 로직 등 모든 트레이딩 파이프라인 코드 수정에 적용됩니다.**
+> **위반 시 "추정 기반 수정 → 또 실패 → 또 수정"의 악순환이 반복됩니다.**
+
+### 🔴 절대 규칙 1: 추정 금지, 팩트만 쓴다
+
+*   **코드를 수정하기 전에 반드시 `/debug` 엔드포인트를 호출하여 실제 API 응답 JSON을 확인한다.**
+*   API 필드명(예: `ccld_qty` vs `ft_ccld_qty`), 응답 구조, 에러 코드를 **추정하지 않는다.**
+*   `/debug` 응답에서 `fills_first_record_keys`를 확인하여 실제 존재하는 필드명 목록을 파악한 후에만 코드를 작성한다.
+
+### 🔴 절대 규칙 2: KV 상태를 반드시 확인한다
+
+*   `pending_fill_check`, `pending_sell`, `pending_approval` 등 KV 상태를 `/debug`에서 먼저 확인한다.
+*   **Stale 데이터(어제 이전 날짜의 미정리 KV)가 있으면 근본 원인부터 파악한다.**
+*   KV 정리 로직이 모든 경로(성공/실패/예외)에서 실행되는지 코드 흐름을 끝까지 추적한다.
+
+### 🔴 절대 규칙 3: 수정 후 반드시 검증한다
+
+*   코드 수정 후 배포 → `/debug` 재호출로 수정 효과를 확인한다.
+*   "배포했으니 다음 장에서 확인하겠습니다"는 **허용되지 않는다.** 가능한 범위 내에서 즉시 검증한다.
+*   문법 검사(`node -c worker.js`)는 필수이지만, 그것만으로는 충분하지 않다.
+
+### 디버깅 체크리스트 (코드 수정 전 필수)
+
+```
+□ /debug 엔드포인트 호출 완료
+□ fills_raw → 실제 API 응답 필드명 확인
+□ fills_first_record_keys → 사용할 필드가 존재하는지 확인
+□ pending_fill_check → stale 여부(날짜 확인) 체크
+□ balance_raw → 잔고에 해당 종목 보유 여부 확인
+□ 위 팩트들에 기반하여 코드 수정 계획 수립
+```
+
+### ⚠️ 왜 이 규칙이 생겼나 (교훈)
+
+2026년 4월, 체결 알림이 4일 연속 실패했습니다. 매번 "추정으로 필드명 수정 → 배포 → 또 실패"를 반복한 원인:
+1. `ccld_qty` vs `ft_ccld_qty` 필드명을 추정으로 작성 → 실제 API가 어떤 필드를 반환하는지 확인 안 함
+2. `pending_fill_check`가 stale 상태로 KV에 남아있는 것을 모름 → debug에 KV 출력이 없었음
+3. 수정 후 `/debug`로 검증하지 않음 → "다음 장에서 확인"으로 넘김
 
 ---
 

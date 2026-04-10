@@ -262,26 +262,19 @@ export default {
     try {
       const isTradingDayNow = isTradingDay(new Date());
 
-      // === A. 체결 확인 폴링 (거래일에만 실행) ===
-      if (isTradingDayNow) {
-        const fillPend = await env.KV.get("pending_fill_check");
-        if (fillPend) {
-          const fillData = JSON.parse(fillPend);
-          const etHour = getETHour();
-          // ★ KV에 저장된 주문 날짜(KST)로 조회 — UTC/KST 불일치 방지
-          const orderDateKst = fillData.order_date_kst || null;
-          // ★ 폴링 횟수 추적 (무한 대기 방지)
-          const pollCount = (fillData.poll_count || 0) + 1;
-          // ★ 이미 알림 보낸 종목 추적 (중복 알림 방지)
-          const alreadyNotified = fillData.notified_symbols || [];
-
-          // ★★★ 핵심 수정: stale 체결확인 자동 정리 ★★★
-          // 주문 날짜(KST)가 오늘(KST)과 다르면 → 하루 넘은 stale 데이터
+      // === A-0. Stale pending_fill_check 자동 정리 (거래일 무관) ===
+      // 날짜가 바뀌었으면 잔고 기반으로 체결 여부 확인 후 정리
+      {
+        const fillPendStale = await env.KV.get("pending_fill_check");
+        if (fillPendStale) {
+          const staleData = JSON.parse(fillPendStale);
+          const orderDateKst = staleData.order_date_kst || null;
           const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
           const todayKst = kstNow.toISOString().slice(0, 10);
+
           if (orderDateKst && orderDateKst !== todayKst) {
             // 잔고에서 해당 종목 보유 여부로 체결 판단
-            const symbols = fillData.symbols || [];
+            const symbols = staleData.symbols || [];
             const holdings = await getBalance(env);
             const heldSymbols = (holdings || [])
               .filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0)
@@ -304,10 +297,25 @@ export default {
             staleMsg += "\n_실시간 알림이 지연되어 잔고 기반으로 확인했습니다._";
             await sendMessage(env, staleMsg, REPLY_KEYBOARD);
             await env.KV.delete("pending_fill_check");
-            // stale 정리 완료 → 아래 로직 스킵
-          } else {
-          // ★ 정상 플로우: 오늘 주문건 체결 확인
+            // stale 정리 완료 → 이하 체결 폴링 스킵 (fillPend 이미 삭제됨)
+          }
+        }
+      }
 
+      // === A. 체결 확인 폴링 (거래일 + 오늘 주문건만) ===
+      if (isTradingDayNow) {
+        const fillPend = await env.KV.get("pending_fill_check");
+        if (fillPend) {
+          const fillData = JSON.parse(fillPend);
+          const etHour = getETHour();
+          // ★ KV에 저장된 주문 날짜(KST)로 조회 — UTC/KST 불일치 방지
+          const orderDateKst = fillData.order_date_kst || null;
+          // ★ 폴링 횟수 추적 (무한 대기 방지)
+          const pollCount = (fillData.poll_count || 0) + 1;
+          // ★ 이미 알림 보낸 종목 추적 (중복 알림 방지)
+          const alreadyNotified = fillData.notified_symbols || [];
+
+          // (stale 정리는 A-0에서 이미 수행됨 → 여기는 오늘 주문건만 도달)
           const orders = await checkOrderFills(env, orderDateKst);
 
           if (!orders) {
@@ -431,8 +439,7 @@ export default {
                 ...fillData, poll_count: pollCount,
               }));
             }
-            }
-          } // end else (정상 플로우)
+          }
         }
       }
 

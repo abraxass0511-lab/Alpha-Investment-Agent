@@ -355,8 +355,19 @@ def _get_holdings_fallback_kis():
         return []
 
 
-def _get_held_symbols():
-    """현재 보유 종목 심볼 목록만 반환합니다 (보고서 매수/보유 판단용)."""
+def _get_held_symbols(prefetched_holdings=None):
+    """현재 보유 종목 심볼 목록만 반환합니다 (보고서 매수/보유 판단용).
+    
+    prefetched_holdings: get_portfolio_section()에서 이미 조회한 보유종목 리스트.
+    전달받으면 API를 재호출하지 않고 재사용합니다.
+    """
+    # ★ 사전 조회 데이터가 있으면 그대로 사용 (중복 API 호출 방지)
+    if prefetched_holdings is not None:
+        symbols = [h.get("symbol", "?") for h in prefetched_holdings if h.get("qty", 0) > 0]
+        print(f"📋 보유종목 심볼 (사전 조회 데이터 재사용): {symbols}")
+        return symbols
+
+    # 사전 데이터 없으면 직접 조회 (폴백)
     try:
         worker_url = os.getenv("WORKER_URL", "")
         worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
@@ -388,13 +399,19 @@ def _get_held_symbols():
 
 
 def get_portfolio_section():
-    """보유종목 현황과 예수금을 Cloudflare Worker 경유로 조회합니다."""
+    """보유종목 현황과 예수금을 Cloudflare Worker 경유로 조회합니다.
+    
+    Returns:
+        tuple: (section_text, holdings_list)
+            - section_text: 텔레그램용 포트폴리오 현황 텍스트
+            - holdings_list: 보유종목 raw 리스트 (held_symbols 판단용 공유 데이터)
+    """
     try:
         worker_url = os.getenv("WORKER_URL", "")
         worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
 
         if not worker_url:
-            return "\n⚠️ Worker URL 미설정\n"
+            return "\n⚠️ Worker URL 미설정\n", []
 
         r = requests.get(
             f"{worker_url}/api/portfolio",
@@ -402,7 +419,7 @@ def get_portfolio_section():
             timeout=15,
         )
         if r.status_code != 200:
-            return f"\n⚠️ 포트폴리오 조회 실패 (HTTP {r.status_code})\n"
+            return f"\n⚠️ 포트폴리오 조회 실패 (HTTP {r.status_code})\n", []
 
         data = r.json()
         holdings = data.get("holdings", [])
@@ -486,11 +503,11 @@ def get_portfolio_section():
         else:
             section += "📭 보유 종목 없음 (현금 100%)\n"
 
-        return section
+        return section, holdings
 
     except Exception as e:
         print(f"⚠️ 포트폴리오 조회 에러: {e}")
-        return "\n⚠️ 포트폴리오 정보 조회 실패\n"
+        return "\n⚠️ 포트폴리오 정보 조회 실패\n", []
 
 
 def report_daily_picks():
@@ -576,8 +593,8 @@ def report_daily_picks():
     title = f"📈 *{date_str}({day_name}) 알파 미국주식 정밀 리포트*\n"
     target_info = f"📡 *대상: S&P500 전체 {sp500_total}종목*\n\n"
     
-    # ── 포트폴리오 현황 (최상단 배치) ──
-    portfolio_section = get_portfolio_section()
+    # ── 포트폴리오 현황 (최상단 배치) + 보유종목 원본 데이터 공유 ──
+    portfolio_section, _portfolio_holdings = get_portfolio_section()
 
     # V6 메타데이터 (5단계 = 모멘텀)
     s12 = meta.get('step12', 0)
@@ -610,8 +627,8 @@ def report_daily_picks():
     
     summary_table += api_warning_section
 
-    # ★ 보유 종목 확인 → 신규 매수 대상만 BUY 표시
-    held_symbols = _get_held_symbols()
+    # ★ 보유 종목 확인 → 포트폴리오 조회 데이터 재사용 (중복 API 호출 방지)
+    held_symbols = _get_held_symbols(prefetched_holdings=_portfolio_holdings)
     print(f"📋 현재 보유 종목: {held_symbols} ({len(held_symbols)}개)")
 
     # ★ 리밸런싱 결과 먼저 로드 (매수 슬롯 판단용)
@@ -781,7 +798,7 @@ def report_daily_picks():
         final_result += f" • 보유 유지: {len(hold_stocks)}종목 모두 기준 충족 ✅\n"
         final_result += " • 🛡️ *신규 매수 없음* — 현 포트폴리오 유지 권고\n\n"
     else:
-        final_result = "*🎯 최종 결과*\n*🛡️ 가디언 조치*: 정밀 필터링(0.7) 기준 미달. **전액 현금 보유 권고.**\n\n"
+        final_result = "*🎯 최종 결과*\n🛡️ *신규 매수 대상 없음* — 현 포트폴리오 유지 권고\n\n"
 
     # ── Gemini AI 코멘트 실패 체크 (보고서 생성 후 카운터 확인) ──
     gemini_fails = _gemini_fail_count

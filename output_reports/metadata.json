@@ -1,1 +1,1 @@
-{"total": 503, "success_all": true, "step12": 263, "step3": 157, "step4": 88, "timestamp": "2026-04-20T21:22:52.007822", "finnhub_calls": 674, "elapsed_min": 19.9, "engine": "Finnhub+Yahoo V5", "trading_date": "2026-04-20", "market_status": "closed", "step5": 5, "step5_api_fail": 0}
+{"total": 503, "success_all": true, "step12": 263, "step3": 148, "step4": 82, "timestamp": "2026-04-21T21:22:55.520821", "finnhub_calls": 665, "elapsed_min": 19.8, "engine": "Finnhub+Yahoo V5", "trading_date": "2026-04-21", "market_status": "closed", "step5": 5, "step5_api_fail": 0}

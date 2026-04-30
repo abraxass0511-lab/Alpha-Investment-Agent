@@ -1,79 +1,87 @@
 Symbol,Name,MarketCap_M,ROE(%),Price,MA50,MA_Momentum(%),Momentum_12_1,GrowthReason,Surprise(%),EPS_Growth(%)
-ALL,Allstate,55880,39.47,212.33,209.94,1.14,0.0653,"Surprise: 44.7%, Growth: 103.2%",44.7,103.2
-GOOGL,Alphabet Inc. (Class A),4221407,35.0,349.94,312.17,12.1,0.7283,"Surprise: 89.4%, Growth: 31.1%",89.4,31.1
-GOOG,Alphabet Inc. (Class C),4221407,35.0,347.31,311.01,11.67,0.7036,"Surprise: 89.4%, Growth: 31.1%",89.4,31.1
-AMP,Ameriprise Financial,43109,61.59,475.38,455.87,4.28,-0.0571,"Surprise: 9.2%, Growth: 66.0%",9.2,66.0
-APH,Amphenol,184654,35.77,148.38,138.48,7.15,0.5594,"Surprise: 11.3%, Growth: 57.6%",11.3,57.6
-APA,APA Corporation,13659,24.51,40.32,36.05,11.83,1.9124,"Surprise: 40.4%, Growth: -18.2%",40.4,-18.2
-APO,Apollo Global Management,71240,16.67,122.28,113.1,8.11,-0.182,"Surprise: 19.3%, Growth: -57.3%",19.3,-57.3
-AMAT,Applied Materials,302548,38.9,382.59,368.55,3.81,1.1632,"Surprise: 5.9%, Growth: 75.2%",5.9,75.2
-APP,AppLovin,150991,249.2,443.43,437.44,1.37,0.3816,"Surprise: 9.5%, Growth: 84.7%",9.5,84.7
-BKR,Baker Hughes,67133,16.8,68.81,61.8,11.34,0.7488,"Surprise: 16.2%, Growth: 132.5%",16.2,132.5
-BA,Boeing,181207,143.62,224.11,217.79,2.9,0.0326,"Surprise: 76.7%, Growth: 31.2%",76.7,31.2
-BKNG,Booking Holdings,134920,139.63,173.98,173.56,0.24,-0.1863,"Surprise: 4.0%, Growth: 38.4%",4.0,38.4
-AVGO,Broadcom,1893062,32.85,405.45,345.74,17.27,0.5368,"Surprise: -0.9%, Growth: 31.6%",-0.9,31.6
-CDNS,Cadence Design Systems,88007,21.68,329.95,296.33,11.35,-0.0902,"Surprise: 1.2%, Growth: 23.0%",1.2,23.0
-CVNA,Carvana,89048,62.85,396.59,336.53,17.85,0.1901,"Surprise: 16.2%, Growth: 946.7%",16.2,946.7
-CASY,Casey's,28998,17.55,781.5,713.34,9.56,0.53,"Surprise: 14.5%, Growth: 49.8%",14.5,49.8
-CBOE,Cboe Global Markets,31804,22.99,305.6,292.93,4.33,0.2795,"Surprise: 2.1%, Growth: 60.5%",2.1,60.5
-CF,CF Industries,19536,29.95,126.78,118.55,6.94,0.7966,"Surprise: 24.9%, Growth: 37.1%",24.9,37.1
-CINF,Cincinnati Financial,25682,16.13,163.22,162.31,0.56,0.1494,"Surprise: 5.7%, Growth: 407.0%",5.7,407.0
-CSCO,Cisco,343088,23.64,89.57,80.92,10.68,0.3578,"Surprise: -0.2%, Growth: 31.2%",-0.2,31.2
-FIX,Comfort Systems USA,60520,51.69,1724.14,1486.28,16.0,2.2116,"Surprise: 52.9%, Growth: 38.8%",52.9,38.8
-COST,Costco,438593,28.81,998.67,996.03,0.27,0.0076,"Surprise: -1.5%, Growth: 45.5%",-1.5,45.5
-CRH,CRH plc,76211,16.54,113.44,111.55,1.69,0.076,"Surprise: -2.4%, Growth: 48.4%",-2.4,48.4
-CCI,Crown Castle,36410,21.01,85.87,85.45,0.49,-0.2111,"Surprise: -13.3%, Growth: 131.8%",-13.3,131.8
-CSX,CSX Corporation,84044,23.53,44.68,41.66,7.25,0.4384,"Surprise: 9.2%, Growth: 26.5%",9.2,26.5
-CMI,Cummins,88830,24.13,638.95,580.52,10.07,0.7738,"Surprise: -17.2%, Growth: 41.4%",-17.2,41.4
-DELL,Dell Technologies,134482,130.7,205.66,165.79,24.04,0.8161,"Surprise: 8.1%, Growth: 57.3%",8.1,57.3
-DAL,Delta Air Lines,44291,23.14,66.27,66.15,0.18,0.5366,"Surprise: 10.7%, Growth: -218.9%",10.7,-218.9
-EME,Emcor,38466,39.13,833.37,772.57,7.87,0.7522,"Surprise: 14.9%, Growth: 53.0%",14.9,53.0
-EXPE,Expedia Group,29674,114.29,250.57,233.39,7.36,0.4551,"Surprise: 10.4%, Growth: -27.3%",10.4,-27.3
-FFIV,"F5, Inc.",18724,19.88,328.15,291.8,12.46,0.0566,"Surprise: 11.1%, Growth: 9.9%",11.1,9.9
-FDX,FedEx,93079,15.76,388.59,370.7,4.83,0.661,"Surprise: 25.7%, Growth: 17.3%",25.7,17.3
-FOXA,Fox Corporation (Class A),25366,16.22,62.94,59.55,5.7,0.1989,"Surprise: 61.7%, Growth: -35.8%",61.7,-35.8
-FOX,Fox Corporation (Class B),25366,16.22,56.62,53.85,5.14,0.1752,"Surprise: 61.7%, Growth: -35.8%",61.7,-35.8
-GRMN,Garmin,47699,19.72,253.08,246.86,2.52,0.2293,"Surprise: 12.1%, Growth: 21.2%",12.1,21.2
-GEV,GE Vernova,292617,87.97,1063.11,912.92,16.45,1.209,"Surprise: 11.6%, Growth: 1816.5%",11.6,1816.5
-GDDY,GoDaddy,11375,384.19,85.76,85.04,0.85,-0.566,"Surprise: 11.8%, Growth: 31.7%",11.8,31.7
-HLT,Hilton Worldwide,73983,171.01,314.5,312.01,0.8,0.3151,"Surprise: 1.3%, Growth: 35.0%",1.3,35.0
-INCY,Incyte,19452,29.15,99.1,95.98,3.25,0.4416,"Surprise: 29.4%, Growth: 83.8%",29.4,83.8
-IBKR,Interactive Brokers,131450,19.89,77.05,71.49,7.78,0.4901,"Surprise: -2.2%, Growth: 21.6%",-2.2,21.6
-JBHT,J.B. Hunt,23617,17.3,246.31,222.78,10.56,0.5854,"Surprise: 1.4%, Growth: 27.4%",1.4,27.4
-JBL,Jabil,34903,58.99,333.86,280.29,19.11,0.6912,"Surprise: 6.2%, Growth: 96.2%",6.2,96.2
-JCI,Johnson Controls,86662,23.52,141.35,137.46,2.83,0.5188,"Surprise: 4.9%, Growth: 34.2%",4.9,34.2
-KEYS,Keysight Technologies,57392,16.56,335.46,299.94,11.84,0.8529,"Surprise: 6.6%, Growth: 68.0%",6.6,68.0
-KLAC,KLA Corporation,237114,95.22,1816.21,1580.01,14.95,0.9825,"Surprise: 0.8%, Growth: 40.9%",0.8,40.9
-LRCX,Lam Research,304946,65.79,248.75,236.33,5.25,1.81,"Surprise: 4.9%, Growth: 40.8%",4.9,40.8
-LITE,Lumentum,56504,27.64,858.32,750.15,14.42,10.0906,"Surprise: 17.4%, Growth: 201.1%",17.4,201.1
-MPC,Marathon Petroleum,67522,24.01,241.81,224.11,7.9,0.8224,"Surprise: 40.0%, Growth: 350.7%",40.0,350.7
-MAS,Masco,14446,279.76,71.26,65.74,8.39,-0.0149,"Surprise: 17.6%, Growth: 20.0%",17.6,20.0
-MA,Mastercard,472366,198.48,525.23,507.16,3.56,-0.0949,"Surprise: 8.8%, Growth: 24.2%",8.8,24.2
-MU,Micron Technology,568705,40.84,518.46,421.15,23.11,3.1919,"Surprise: 27.3%, Growth: 756.0%",27.3,756.0
-MSFT,Microsoft,3176164,33.61,424.46,395.61,7.29,-0.0849,"Surprise: 3.1%, Growth: 59.8%",3.1,59.8
-MS,Morgan Stanley,301033,15.45,187.08,171.47,9.1,0.3977,"Surprise: 10.9%, Growth: 31.9%",10.9,31.9
-MSCI,MSCI Inc.,43287,108.67,598.13,557.83,7.22,-0.0111,"Surprise: 0.4%, Growth: 49.1%",0.4,49.1
-NDAQ,"Nasdaq, Inc.",51640,15.02,91.27,86.09,6.02,0.1092,"Surprise: 1.1%, Growth: 33.8%",1.1,33.8
-NEE,NextEra Energy,201256,15.24,94.17,92.46,1.85,0.4173,"Surprise: 12.5%, Growth: 160.0%",12.5,160.0
-NDSN,Nordson Corporation,15719,17.3,280.34,276.54,1.38,0.3701,"Surprise: -2.2%, Growth: 44.2%",-2.2,44.2
-NVDA,Nvidia,5084046,104.37,209.25,186.71,12.07,0.5168,"Surprise: 3.6%, Growth: 95.6%",3.6,95.6
-ORCL,Oracle Corporation,468307,57.35,163.83,154.71,5.9,-0.0072,"Surprise: 3.1%, Growth: 24.5%",3.1,24.5
-PANW,Palo Alto Networks,146550,15.49,181.54,162.67,11.6,-0.1743,"Surprise: 7.2%, Growth: 60.5%",7.2,60.5
-PYPL,PayPal,44660,25.87,50.94,46.36,9.89,-0.3179,"Surprise: -6.1%, Growth: 39.4%",-6.1,39.4
-PSX,Phillips 66,66483,15.9,173.49,166.78,4.02,0.8412,"Surprise: 278.6%, Growth: 242728.4%",278.6,242728.4
-PSA,Public Storage,52162,19.03,294.09,292.77,0.45,-0.0801,"Surprise: 75.0%, Growth: 32.8%",75.0,32.8
-RL,Ralph Lauren Corporation,22216,34.74,359.45,358.2,0.35,0.4689,"Surprise: 3.9%, Growth: 24.9%",3.9,24.9
-ROK,Rockwell Automation,45088,27.69,400.2,383.91,4.24,0.4287,"Surprise: 10.5%, Growth: 67.1%",10.5,67.1
-STX,Seagate Technology,126271,129.19,643.3,448.48,43.44,3.0327,"Surprise: 16.1%, Growth: 67.7%",16.1,67.7
-SPG,Simon Property Group,65387,146.73,200.09,194.67,2.78,0.2163,"Surprise: -78.7%, Growth: 358.1%",-78.7,358.1
-SBUX,Starbucks,110831,115.68,105.5,96.45,9.38,0.1132,"Surprise: 14.2%, Growth: -62.5%",14.2,-62.5
-STLD,Steel Dynamics,32846,15.25,224.37,189.77,18.23,0.3381,"Surprise: -2.1%, Growth: 93.1%",-2.1,93.1
-SYF,Synchrony Financial,25376,21.41,75.12,70.44,6.65,0.2938,"Surprise: 2.8%, Growth: 20.1%",2.8,20.1
-TRGP,Targa Resources,53706,71.13,250.14,239.67,4.37,0.4774,"Surprise: 8.0%, Growth: 74.5%",8.0,74.5
-TGT,Target Corporation,57572,23.89,127.87,120.22,6.36,0.2846,"Surprise: 12.1%, Growth: -5.0%",12.1,-5.0
-TXN,Texas Instruments,244055,30.44,269.22,212.23,26.85,0.1914,"Surprise: 21.6%, Growth: 31.3%",21.6,31.3
-TRV,Travelers Companies (The),65730,24.14,302.25,300.48,0.59,0.1223,"Surprise: 7.9%, Growth: 357.6%",7.9,357.6
-VRT,Vertiv,117165,42.06,306.18,272.39,12.41,1.7467,"Surprise: 16.0%, Growth: 135.7%",16.0,135.7
-WST,West Pharmaceutical Services,20909,17.87,295.36,255.9,15.42,0.1632,"Surprise: 25.8%, Growth: 56.1%",25.8,56.1
-WDC,Western Digital,133162,62.71,412.76,311.34,32.58,4.7628,"Surprise: 10.0%, Growth: 189.6%",10.0,189.6
-WMB,Williams Companies,90028,20.84,73.32,72.88,0.6,0.2778,"Surprise: 25.3%, Growth: 50.8%",25.3,50.8
+ALL,Allstate,54997,39.47,217.26,210.12,3.4,0.0719,"Surprise: 44.7%, Growth: 103.2%",44.7,103.2
+GOOGL,Alphabet Inc. (Class A),4227778,35.0,384.8,313.8,22.62,0.7889,"Surprise: 89.4%, Growth: 31.1%",89.4,31.1
+GOOG,Alphabet Inc. (Class C),4227778,35.0,381.94,312.58,22.19,0.7682,"Surprise: 89.4%, Growth: 31.1%",89.4,31.1
+AMT,American Tower,83102,68.12,182.71,178.97,2.09,-0.2091,"Surprise: 75.4%, Growth: 76.9%",75.4,76.9
+AMP,Ameriprise Financial,43112,61.59,474.79,455.81,4.17,-0.0432,"Surprise: 9.2%, Growth: 66.0%",9.2,66.0
+APH,Amphenol,184654,35.77,147.27,138.48,6.35,0.6183,"Surprise: 11.3%, Growth: 24.1%",11.3,24.1
+APA,APA Corporation,14249,24.51,40.73,36.3,12.21,1.7074,"Surprise: 40.4%, Growth: -18.2%",40.4,-18.2
+APO,Apollo Global Management,70497,16.67,128.72,113.18,13.73,-0.1796,"Surprise: 19.3%, Growth: -57.3%",19.3,-57.3
+AMAT,Applied Materials,309524,38.9,394.49,369.06,6.89,1.315,"Surprise: 5.9%, Growth: 75.2%",5.9,75.2
+APP,AppLovin,149108,249.2,446.35,438.28,1.84,0.424,"Surprise: 9.5%, Growth: 84.7%",9.5,84.7
+BKR,Baker Hughes,68264,16.8,69.67,61.96,12.44,0.7211,"Surprise: 16.2%, Growth: 132.5%",16.2,132.5
+BA,Boeing,180655,143.62,229.03,217.59,5.26,0.0882,"Surprise: 76.7%, Growth: 31.2%",76.7,31.2
+BMY,Bristol Myers Squibb,117788,39.28,60.59,59.2,2.35,0.2705,"Surprise: 10.9%, Growth: 1392.1%",10.9,1392.1
+AVGO,Broadcom,1919671,32.85,417.43,347.43,20.15,0.5812,"Surprise: -0.9%, Growth: 31.6%",-0.9,31.6
+CDNS,Cadence Design Systems,89734,21.68,329.59,296.82,11.04,-0.0729,"Surprise: 1.2%, Growth: 23.0%",1.2,23.0
+CVNA,Carvana,86894,62.85,395.8,337.22,17.37,0.2482,"Surprise: 16.2%, Growth: 946.7%",16.2,946.7
+CASY,Casey's,28883,17.55,822.15,716.63,14.72,0.6028,"Surprise: 14.5%, Growth: 49.8%",14.5,49.8
+CAT,Caterpillar Inc.,376906,45.15,890.11,746.62,19.22,1.2766,"Surprise: 18.8%, Growth: -11.4%",18.8,-11.4
+CBOE,Cboe Global Markets,32009,22.99,300.09,293.24,2.34,0.2773,"Surprise: 2.1%, Growth: 60.5%",2.1,60.5
+CF,CF Industries,19536,29.95,124.2,119.11,4.27,0.6687,"Surprise: 24.9%, Growth: 37.1%",24.9,37.1
+CINF,Cincinnati Financial,25248,16.13,163.6,162.33,0.78,0.151,"Surprise: 5.7%, Growth: 407.0%",5.7,407.0
+CSCO,Cisco,353792,23.64,91.5,81.2,12.69,0.3584,"Surprise: -0.2%, Growth: 31.2%",-0.2,31.2
+FIX,Comfort Systems USA,61102,51.69,1840.25,1496.71,22.95,2.3079,"Surprise: 52.9%, Growth: 38.8%",52.9,38.8
+STZ,Constellation Brands,27002,22.08,156.58,153.75,1.84,-0.1747,"Surprise: 9.5%, Growth: 155.5%",9.5,155.5
+COST,Costco,448065,28.81,1014.53,996.4,1.82,0.0029,"Surprise: -1.5%, Growth: 45.5%",-1.5,45.5
+CRH,CRH plc,78728,16.54,118.42,111.43,6.27,0.0999,"Surprise: 10.6%, Growth: 48.4%",10.6,48.4
+CCI,Crown Castle,37471,21.01,88.78,85.5,3.84,-0.199,"Surprise: -13.3%, Growth: 131.8%",-13.3,131.8
+CSX,CSX Corporation,83022,23.53,45.43,41.74,8.83,0.4826,"Surprise: 9.2%, Growth: 26.5%",9.2,26.5
+CMI,Cummins,92705,24.13,671.01,582.12,15.27,0.8585,"Surprise: -17.2%, Growth: 41.4%",-17.2,41.4
+DELL,Dell Technologies,134305,130.7,208.95,167.65,24.64,0.8065,"Surprise: 8.1%, Growth: 57.3%",8.1,57.3
+DAL,Delta Air Lines,44544,23.14,67.99,66.09,2.87,0.6216,"Surprise: 10.7%, Growth: -218.9%",10.7,-218.9
+EME,Emcor,37112,39.13,891.67,774.75,15.09,0.7923,"Surprise: 14.9%, Growth: 30.0%",14.9,30.0
+EXPE,Expedia Group,30703,114.29,248.37,234.29,6.01,0.4736,"Surprise: 10.4%, Growth: -27.3%",10.4,-27.3
+FFIV,"F5, Inc.",18194,19.88,323.9,292.72,10.65,0.0886,"Surprise: 11.1%, Growth: 9.9%",11.1,9.9
+FDX,FedEx,94448,15.76,403.31,371.13,8.67,0.7333,"Surprise: 25.7%, Growth: 17.3%",25.7,17.3
+FSLR,First Solar,20334,17.32,201.89,199.22,1.34,0.5585,"Surprise: 10.2%, Growth: 32.3%",10.2,32.3
+FOXA,Fox Corporation (Class A),25303,16.22,63.49,59.68,6.39,0.1978,"Surprise: 61.7%, Growth: -35.8%",61.7,-35.8
+FOX,Fox Corporation (Class B),25303,16.22,57.02,53.95,5.69,0.1697,"Surprise: 61.7%, Growth: -35.8%",61.7,-35.8
+GRMN,Garmin,48815,19.72,251.14,247.15,1.62,0.2626,"Surprise: 12.1%, Growth: 21.2%",12.1,21.2
+GEV,GE Vernova,285679,87.97,1083.46,918.25,17.99,1.2884,"Surprise: 11.6%, Growth: 1816.5%",11.6,1816.5
+GDDY,GoDaddy,11436,384.19,86.79,84.96,2.15,-0.5702,"Surprise: 3.8%, Growth: 31.7%",3.8,31.7
+HLT,Hilton Worldwide,71956,171.01,324.07,312.17,3.81,0.3018,"Surprise: 1.3%, Growth: 35.0%",1.3,35.0
+IBKR,Interactive Brokers,130704,19.89,79.5,71.58,11.07,0.5467,"Surprise: -2.2%, Growth: 21.6%",-2.2,21.6
+IRM,Iron Mountain,34067,85.19,125.99,108.54,16.08,0.151,"Surprise: 174.9%, Growth: -14.2%",174.9,-14.2
+JBHT,J.B. Hunt,23137,17.3,251.53,223.34,12.62,0.6505,"Surprise: 1.4%, Growth: 27.4%",1.4,27.4
+JBL,Jabil,35223,58.99,337.49,281.83,19.75,0.8027,"Surprise: 6.2%, Growth: 96.2%",6.2,96.2
+JCI,Johnson Controls,86516,23.52,146.03,137.6,6.12,0.511,"Surprise: 4.9%, Growth: 34.2%",4.9,34.2
+KEYS,Keysight Technologies,58404,16.56,349.91,302.15,15.81,0.9402,"Surprise: 6.6%, Growth: 68.0%",6.6,68.0
+KLAC,KLA Corporation,238063,95.22,1750.35,1585.41,10.4,1.1936,"Surprise: 0.8%, Growth: 40.9%",0.8,40.9
+LRCX,Lam Research,320109,65.79,257.86,236.69,8.94,2.0005,"Surprise: 4.9%, Growth: 40.8%",4.9,40.8
+LITE,Lumentum,61284,27.64,902.32,756.31,19.3,10.4233,"Surprise: 17.4%, Growth: 201.1%",17.4,201.1
+MPC,Marathon Petroleum,71165,24.01,248.29,225.08,10.31,0.811,"Surprise: 40.0%, Growth: 350.7%",40.0,350.7
+MAS,Masco,14400,279.76,71.82,65.65,9.39,0.0201,"Surprise: 17.6%, Growth: 20.0%",17.6,20.0
+MU,Micron Technology,580763,40.84,517.16,423.07,22.24,3.3545,"Surprise: 27.3%, Growth: 756.0%",27.3,756.0
+MSFT,Microsoft,2994533,33.13,407.78,395.79,3.03,-0.1232,"Surprise: 3.1%, Growth: 59.8%",3.1,59.8
+MNST,Monster Beverage,74868,25.65,77.07,76.81,0.34,0.2174,"Surprise: 3.5%, Growth: 66.6%",3.5,66.6
+MS,Morgan Stanley,296200,15.45,190.59,171.75,10.97,0.4358,"Surprise: 10.9%, Growth: 31.9%",10.9,31.9
+MSCI,MSCI Inc.,42835,108.67,591.41,558.75,5.84,0.0004,"Surprise: 0.4%, Growth: 49.1%",0.4,49.1
+NDAQ,"Nasdaq, Inc.",51617,15.02,91.91,86.29,6.51,0.1285,"Surprise: 1.1%, Growth: 33.8%",1.1,33.8
+NEE,NextEra Energy,196231,15.24,97.88,92.61,5.69,0.448,"Surprise: 12.5%, Growth: 160.0%",12.5,160.0
+NDSN,Nordson Corporation,15667,17.3,288.45,276.34,4.38,0.4172,"Surprise: -2.2%, Growth: 44.2%",-2.2,44.2
+NVDA,Nvidia,4877620,104.37,199.57,186.94,6.76,0.563,"Surprise: 3.6%, Growth: 95.6%",3.6,95.6
+NXPI,NXP Semiconductors,73027,20.73,293.59,212.81,37.96,0.1032,"Surprise: 1.5%, Growth: 130.7%",1.5,130.7
+ORCL,Oracle Corporation,466782,57.35,161.39,154.82,4.24,0.0177,"Surprise: 3.1%, Growth: 24.5%",3.1,24.5
+PANW,Palo Alto Networks,145052,15.49,179.32,163.21,9.87,-0.1393,"Surprise: 7.2%, Growth: 60.5%",7.2,60.5
+PYPL,PayPal,45829,25.87,50.14,46.53,7.75,-0.3048,"Surprise: -6.1%, Growth: 39.4%",-6.1,39.4
+PEP,PepsiCo,212245,43.89,158.49,157.79,0.45,0.2094,"Surprise: 2.8%, Growth: 27.8%",2.8,27.8
+PSX,Phillips 66,70497,15.9,179.15,167.24,7.12,0.8255,"Surprise: 278.6%, Growth: -56.8%",278.6,-56.8
+PSA,Public Storage,51626,19.03,302.45,292.9,3.26,-0.0588,"Surprise: 75.0%, Growth: 32.8%",75.0,32.8
+RL,Ralph Lauren Corporation,21767,34.74,358.64,357.83,0.23,0.5501,"Surprise: 3.9%, Growth: 24.9%",3.9,24.9
+ROK,Rockwell Automation,44859,27.69,408.91,384.18,6.44,0.4623,"Surprise: 10.5%, Growth: 67.1%",10.5,67.1
+STX,Seagate Technology,140286,172.59,673.64,453.49,48.55,3.4085,"Surprise: 16.1%, Growth: 108.3%",16.1,108.3
+SPG,Simon Property Group,64997,146.73,203.71,194.8,4.57,0.2326,"Surprise: -78.7%, Growth: 358.1%",-78.7,358.1
+SBUX,Starbucks,120196,115.68,105.33,96.64,8.99,0.1226,"Surprise: 14.2%, Growth: 32.6%",14.2,32.6
+STLD,Steel Dynamics,32962,15.25,228.66,190.5,20.03,0.4002,"Surprise: -2.1%, Growth: 93.1%",-2.1,93.1
+SYF,Synchrony Financial,25349,21.41,76.2,70.51,8.08,0.324,"Surprise: 2.8%, Growth: 20.1%",2.8,20.1
+TRGP,Targa Resources,53731,71.13,260.08,240.32,8.22,0.5719,"Surprise: 8.0%, Growth: 74.5%",8.0,74.5
+TGT,Target Corporation,57907,23.89,129.75,120.51,7.67,0.3208,"Surprise: 12.1%, Growth: -5.0%",12.1,-5.0
+TER,Teradyne,47959,19.88,343.47,329.21,4.33,3.0331,"Surprise: 20.9%, Growth: 314.8%",20.9,314.8
+TXN,Texas Instruments,254953,30.44,281.08,213.38,31.73,0.2547,"Surprise: 21.6%, Growth: 31.3%",21.6,31.3
+TRV,Travelers Companies (The),64640,24.14,305.14,300.64,1.5,0.1333,"Surprise: 7.9%, Growth: 357.6%",7.9,357.6
+VRT,Vertiv,117606,42.06,328.49,274.09,19.85,1.7109,"Surprise: 16.0%, Growth: 135.7%",16.0,135.7
+V,Visa Inc.,630340,58.9,329.84,310.46,6.24,-0.1108,"Surprise: 4.8%, Growth: 26.7%",4.8,26.7
+WST,West Pharmaceutical Services,20909,17.87,297.59,256.7,15.93,0.1951,"Surprise: 25.8%, Growth: 56.1%",25.8,56.1
+WDC,Western Digital,141513,62.71,434.52,314.1,38.34,5.1811,"Surprise: 13.3%, Growth: 189.6%",13.3,189.6
+WMB,Williams Companies,90028,20.84,76.31,72.98,4.57,0.2783,"Surprise: 25.3%, Growth: 50.8%",25.3,50.8

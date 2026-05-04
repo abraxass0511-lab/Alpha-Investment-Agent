@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-05-01 21:56",
+  "timestamp": "2026-05-04 21:26",
   "sell": [],
   "buy": [],
   "held_count": 5,
   "remaining_held": 5,
   "available_slots": 0,
-  "scan_passed": 86,
+  "scan_passed": 85,
   "picks_passed": 5
 }

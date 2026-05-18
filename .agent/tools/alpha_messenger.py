@@ -194,39 +194,48 @@ def _treasury_allocation_stage(us10y, us30y):
 
 def get_buffett_indicator():
     """버핏지표(Buffett Indicator) 조회: 미국 시가총액/GDP 비율
-    1차: 구루포커스, 2차: currentmarketvaluation.com
+    1차: 구루포커스 (5회 재시도) — 실시간 데이터
+    2차: currentmarketvaluation.com 폴백 — ⚠️ 월말 기준 과거 데이터
     """
-    # ── 1차: 구루포커스 (TMC/GDP current: XXX 패턴) ──
-    try:
-        import re
-        r = requests.get(
-            "https://www.gurufocus.com/stock-market-valuations.php",
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-            timeout=15,
-        )
-        if r.status_code == 200:
-            # 페이지 소스에서 TMC/GDP (current: 216.2) 같은 패턴 추출
-            match = re.search(r"TMC/GDP\s*\(current:\s*([\d.]+)\)", r.text)
-            if match:
-                ratio = float(match.group(1))
-                print(f"✅ 버핏지표 조회 성공 (구루포커스): {ratio}%")
-                return {"ratio": ratio, "source": "GuruFocus"}
-            # 다른 패턴도 시도: "Total Market Index is currently at XXX%"
-            match2 = re.search(r'(?:ratio|indicator).*?(\d{2,3}\.\d)\s*%', r.text, re.IGNORECASE)
-            if match2:
-                ratio = float(match2.group(1))
-                print(f"✅ 버핏지표 조회 성공 (구루포커스 대체패턴): {ratio}%")
-                return {"ratio": ratio, "source": "GuruFocus"}
-    except Exception as e:
-        print(f"⚠️ 버핏지표 구루포커스 에러: {e}")
+    import re, time
 
-    # ── 2차: currentmarketvaluation.com ──
+    # ── 1차: 구루포커스 (5회 재시도) ──
+    for attempt in range(1, 6):
+        try:
+            r = requests.get(
+                "https://www.gurufocus.com/stock-market-valuations.php",
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Referer": "https://www.gurufocus.com/",
+                },
+                timeout=15,
+            )
+            if r.status_code == 200:
+                # 1차 패턴: TMC/GDP (current: 234.5)
+                match = re.search(r"TMC/GDP\s*\(current:\s*([\d.]+)\)", r.text)
+                if match:
+                    ratio = float(match.group(1))
+                    print(f"  ✅ 버핏지표 조회 성공 (구루포커스, 시도 {attempt}/5): {ratio}%")
+                    return {"ratio": ratio, "source": "GuruFocus", "stale": False}
+                # 2차 패턴
+                match2 = re.search(r'(?:ratio|indicator).*?(\d{2,3}\.\d)\s*%', r.text, re.IGNORECASE)
+                if match2:
+                    ratio = float(match2.group(1))
+                    print(f"  ✅ 버핏지표 조회 성공 (구루포커스 대체패턴, 시도 {attempt}/5): {ratio}%")
+                    return {"ratio": ratio, "source": "GuruFocus", "stale": False}
+                print(f"  ⚠️ 구루포커스 파싱 실패 (시도 {attempt}/5)")
+            else:
+                print(f"  ⚠️ 구루포커스 HTTP {r.status_code} (시도 {attempt}/5)")
+        except Exception as e:
+            print(f"  ⚠️ 구루포커스 에러 (시도 {attempt}/5): {e}")
+        if attempt < 5:
+            time.sleep(2)  # 2초 대기 후 재시도
+
+    # ── 2차: currentmarketvaluation.com (⚠️ 월말 기준 과거 데이터) ──
+    print("  🔄 구루포커스 5회 실패 → CMV 폴백 (⚠️ 과거 데이터 주의)")
     try:
-        import re
         r = requests.get(
             "https://currentmarketvaluation.com/models/buffett-indicator.php",
             headers={
@@ -236,22 +245,24 @@ def get_buffett_indicator():
             timeout=15,
         )
         if r.status_code == 200:
-            # "Buffett Indicator = $72.14T / $31.33T = 230%" 패턴
+            # 기준일 추출: "As of March 31, 2026"
+            date_match = re.search(r'As of\s+([A-Z][a-z]+ \d{1,2},? \d{4})', r.text)
+            data_date = date_match.group(1) if date_match else "월말 기준"
+
             match = re.search(r'Buffett\s+Indicator\s*=.*?=\s*(\d{2,3})%', r.text)
             if match:
                 ratio = float(match.group(1))
-                print(f"✅ 버핏지표 조회 성공 (CMV): {ratio}%")
-                return {"ratio": ratio, "source": "CMV"}
-            # OG description에서 추출: "75.15% higher than its historical average"
+                print(f"  ✅ 버핏지표 조회 성공 (CMV, {data_date}): {ratio}%")
+                return {"ratio": ratio, "source": "CMV", "stale": True, "data_date": data_date}
             match2 = re.search(r'current.*?value.*?(\d{2,3})%', r.text, re.IGNORECASE)
             if match2:
                 ratio = float(match2.group(1))
-                print(f"✅ 버핏지표 조회 성공 (CMV 대체패턴): {ratio}%")
-                return {"ratio": ratio, "source": "CMV"}
+                print(f"  ✅ 버핏지표 조회 성공 (CMV 대체패턴, {data_date}): {ratio}%")
+                return {"ratio": ratio, "source": "CMV", "stale": True, "data_date": data_date}
     except Exception as e:
-        print(f"⚠️ 버핏지표 CMV 에러: {e}")
+        print(f"  ⚠️ 버핏지표 CMV 에러: {e}")
 
-    print("❌ 버핏지표 조회 실패 (모든 소스)")
+    print("  ❌ 버핏지표 조회 실패 (모든 소스)")
     return None
 
 
@@ -1034,8 +1045,12 @@ def report_reference_indicators():
     # ── 2. 버핏지표 ──
     if bi:
         strategy, bi_emoji = _buffett_strategy(bi['ratio'])
+        stale_warn = ""
+        if bi.get('stale'):
+            data_date = bi.get('data_date', '월말 기준')
+            stale_warn = f"\n└ ⚠️ _과거 데이터 ({data_date}) — CMV 폴백_"
         msg += (
-            f"{bi_emoji} *버핏지표: {bi['ratio']:.1f}%*\n"
+            f"{bi_emoji} *버핏지표: {bi['ratio']:.1f}%*{stale_warn}\n"
             f"└ 권장 비중: {strategy}\n"
             f"└ 140%미만 주식100% | 140~170% 주식80/현금20 | 170%초과 주식60/현금40\n\n"
         )

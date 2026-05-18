@@ -1065,7 +1065,8 @@ def report_reference_indicators():
         msg += "└ 1단계(호황): 10Y<4.0 AND 30Y<4.5 | 2단계(경계): 10Y<4.5 OR 30Y<5.0\n"
         msg += "└ 3단계(위험): 10Y<5.0 OR 30Y<5.25 | 4단계(패닉): 10Y>5.0 OR 30Y>5.25\n\n"
     else:
-        msg += "⚠️ 미 국채금리 조회 실패\n\n"
+        msg += "🏛️ *미 국채금리 현황*\n"
+        msg += "└ ⚠️ 데이터를 가져오지 못했습니다 (yfinance·Investing.com 모두 실패)\n\n"
 
     # ── 2. 버핏지표 ──
     if bi:
@@ -1081,7 +1082,8 @@ def report_reference_indicators():
             f"└ 140%미만 주식100% | 140~170% 주식80/현금20 | 170%초과 주식60/현금40\n\n"
         )
     else:
-        msg += "⚠️ 버핏지표 조회 실패\n\n"
+        msg += "🔴 *버핏지표*\n"
+        msg += "└ ⚠️ 데이터를 가져오지 못했습니다 (GuruFocus·yfinance·CMV 모두 실패)\n\n"
 
     # ── 3. QQQ 고점 대비 하락률 ──
     if qqq:
@@ -1095,7 +1097,8 @@ def report_reference_indicators():
             f"└ -20% 1차투입(현금 1/3) | -30% 2차투입(현금 1/3) | -40% 3차투입(현금 1/3)\n\n"
         )
     else:
-        msg += "⚠️ QQQ 하락률 조회 실패\n\n"
+        msg += "📊 *QQQ 고점 대비 하락률 현황*\n"
+        msg += "└ ⚠️ 데이터를 가져오지 못했습니다 (yfinance 실패)\n\n"
 
     # ── 4. 공포·탐욕 지수 ──
     if fg:
@@ -1104,7 +1107,8 @@ def report_reference_indicators():
             f"└ 0~25 극도의 공포 | 26~44 공포 | 45~55 중립 | 56~74 탐욕 | 75~100 극도의 탐욕\n\n"
         )
     else:
-        msg += "⚠️ 공포·탐욕 지수 조회 실패\n\n"
+        msg += "⚠️ *공포·탐욕 지수*\n"
+        msg += "└ ⚠️ 데이터를 가져오지 못했습니다 (CNN API 실패)\n\n"
 
     # ── 5. 종합 판단 ──
     msg += "━━━━━━━━━━━━━━━━━━\n"

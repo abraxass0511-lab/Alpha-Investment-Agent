@@ -51,6 +51,7 @@ def get_qqq_drawdown():
             "ath_date": ath_date_str,
             "current": round(current_price, 2),
             "drawdown_pct": round(drawdown_pct, 2),
+            "source": "yfinance",
         }
     except Exception as e:
         print(f"⚠️ QQQ 하락률 조회 에러: {e}")
@@ -74,7 +75,7 @@ def get_treasury_yields():
     1차: yfinance (^TNX, ^TYX) — 안정적 API
     2차: Investing.com 폴백 (yfinance 실패 시)
     """
-    result = {"us10y": None, "us30y": None}
+    result = {"us10y": None, "us30y": None, "source": ""}
 
     # ── 1차: yfinance (안정적 API) ──
     try:
@@ -94,6 +95,7 @@ def get_treasury_yields():
             print(f"  ✅ 30년물 금리 (yfinance): {result['us30y']}%")
 
         if result["us10y"] is not None and result["us30y"] is not None:
+            result["source"] = "yfinance"
             return result
     except Exception as e:
         print(f"  ⚠️ yfinance 국채금리 조회 에러: {e}")
@@ -136,6 +138,7 @@ def get_treasury_yields():
     if result["us10y"] is None and result["us30y"] is None:
         print("❌ 국채금리 조회 실패 (모든 소스)")
         return None
+    result["source"] = "yfinance+Investing.com" if result["source"] == "" else result["source"]
     return result
 
 
@@ -331,7 +334,7 @@ def get_fear_greed_index():
                 else:
                     label = "Extreme Greed (극도의 탐욕)"
                     emoji = "🟣"
-                return {"score": score, "label": label, "emoji": emoji}
+                return {"score": score, "label": label, "emoji": emoji, "source": "CNN"}
     except Exception as e:
         print(f"⚠️ 공포지수 조회 에러: {e}")
     return None
@@ -1042,7 +1045,8 @@ def report_reference_indicators():
         us10y = treasury["us10y"]
         us30y = treasury["us30y"]
 
-        msg += "🏛️ *미 국채금리 현황*\n"
+        t_src = treasury.get('source', '')
+        msg += f"🏛️ *미 국채금리 현황* _{t_src}_\n"
         if us10y is not None:
             msg += f"└ 10년물: *{us10y:.3f}%*\n"
         else:
@@ -1070,8 +1074,9 @@ def report_reference_indicators():
         if bi.get('stale'):
             data_date = bi.get('data_date', '월말 기준')
             stale_warn = f"\n└ ⚠️ _과거 데이터 ({data_date}) — CMV 폴백_"
+        bi_src = bi.get('source', '')
         msg += (
-            f"{bi_emoji} *버핏지표: {bi['ratio']:.1f}%*{stale_warn}\n"
+            f"{bi_emoji} *버핏지표: {bi['ratio']:.1f}%* _{bi_src}_{stale_warn}\n"
             f"└ 권장 비중: {strategy}\n"
             f"└ 140%미만 주식100% | 140~170% 주식80/현금20 | 170%초과 주식60/현금40\n\n"
         )
@@ -1082,7 +1087,7 @@ def report_reference_indicators():
     if qqq:
         stage_text, stage_num = _qqq_invest_stage(qqq['drawdown_pct'])
         msg += (
-            f"📊 *QQQ 고점 대비 하락률 현황*\n"
+            f"📊 *QQQ 고점 대비 하락률 현황* _{qqq.get('source', '')}_\n"
             f"└ 최고점 (ATH): *${qqq['ath']}* ({qqq['ath_date']} 기록)\n"
             f"└ 현재가: *${qqq['current']}*\n"
             f"└ 현재 하락률: *{qqq['drawdown_pct']:+.2f}%*\n"
@@ -1095,7 +1100,7 @@ def report_reference_indicators():
     # ── 4. 공포·탐욕 지수 ──
     if fg:
         msg += (
-            f"{fg['emoji']} *공포·탐욕 지수: {fg['score']}* ({fg['label']})\n"
+            f"{fg['emoji']} *공포·탐욕 지수: {fg['score']}* ({fg['label']}) _{fg.get('source', '')}_\n"
             f"└ 0~25 극도의 공포 | 26~44 공포 | 45~55 중립 | 56~74 탐욕 | 75~100 극도의 탐욕\n\n"
         )
     else:

@@ -143,8 +143,10 @@ def _treasury_allocation_stage(us10y, us30y):
     """국채금리 기반 자산배분 플레이북 4단계 판정
     
     규칙:
-    - 1단계: 10Y < 4.0% AND 30Y < 4.5% (둘 다 만족해야 함)
-    - 2~4단계: OR 조건 (하나만 만족해도 해당 단계)
+    - 1단계(호황기): 10Y < 4.0% AND 30Y < 4.5% (★둘 다 만족해야 함)
+    - 2단계(경계기): 10Y 4.0~4.5% OR 30Y 4.5~5.0%
+    - 3단계(위험기): 10Y 4.5~5.0% OR 30Y 5.0~5.25%
+    - 4단계(패닉기): 10Y > 5.0% OR 30Y > 5.25%
     - 상충 시: 위험도 높은(숫자 큰) 단계가 최종 결정
     """
     stage = 1  # 기본: 호황기
@@ -155,10 +157,10 @@ def _treasury_allocation_stage(us10y, us30y):
     else:
         stage = 2  # 최소 경계기
 
-    # 2~4단계: OR 조건, 높은 단계 우선
+    # 3~4단계: OR 조건, 높은 단계 우선
     if us10y >= 4.5 or us30y >= 5.0:
         stage = max(stage, 3)
-    if us10y >= 5.0 or us30y >= 5.5:
+    if us10y > 5.0 or us30y > 5.25:
         stage = max(stage, 4)
 
     stages = {
@@ -171,19 +173,19 @@ def _treasury_allocation_stage(us10y, us30y):
         2: {
             "name": "2단계 (경계기)",
             "emoji": "🟡",
-            "allocation": "주식 70% / 현금 20% / 채권 10%",
+            "allocation": "주식 70% / 현금 30%",
             "desc": "금리 상승 초기 → 현금 비중 확대",
         },
         3: {
-            "name": "3단계 (긴축기)",
+            "name": "3단계 (위험기)",
             "emoji": "🟠",
-            "allocation": "주식 50% / 현금 30% / 채권 20%",
+            "allocation": "주식 50~60% / 현금 40~50%",
             "desc": "금리 고공 → 방어 태세 전환",
         },
         4: {
-            "name": "4단계 (위기 경계)",
+            "name": "4단계 (패닉기)",
             "emoji": "🔴",
-            "allocation": "주식 30% / 현금 50% / 채권 20%",
+            "allocation": "주식 30~40% / 현금 60~70%",
             "desc": "극단적 금리 → 최대 방어",
         },
     }
@@ -1024,8 +1026,8 @@ def report_reference_indicators():
             msg += f"└ {stage_info['emoji']} *{stage_info['name']}*\n"
             msg += f"└ 권장 비중: {stage_info['allocation']}\n"
             msg += f"└ _{stage_info['desc']}_\n"
-        msg += "└ 1단계: 10Y<4.0 AND 30Y<4.5 | 2단계: 10Y<4.5 OR 30Y<5.0\n"
-        msg += "└ 3단계: 10Y<5.0 OR 30Y<5.5 | 4단계: 10Y≥5.0 OR 30Y≥5.5\n\n"
+        msg += "└ 1단계(호황): 10Y<4.0 AND 30Y<4.5 | 2단계(경계): 10Y<4.5 OR 30Y<5.0\n"
+        msg += "└ 3단계(위험): 10Y<5.0 OR 30Y<5.25 | 4단계(패닉): 10Y>5.0 OR 30Y>5.25\n\n"
     else:
         msg += "⚠️ 미 국채금리 조회 실패\n\n"
 

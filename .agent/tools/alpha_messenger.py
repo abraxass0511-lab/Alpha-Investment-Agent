@@ -194,8 +194,9 @@ def _treasury_allocation_stage(us10y, us30y):
 
 def get_buffett_indicator():
     """버핏지표(Buffett Indicator) 조회: 미국 시가총액/GDP 비율
-    1차: 구루포커스 (5회 재시도) — 실시간 데이터
-    2차: currentmarketvaluation.com 폴백 — ⚠️ 월말 기준 과거 데이터
+    1차: 구루포커스 (5회 재시도) — 실시간 웹 데이터
+    2차: yfinance Wilshire 5000 / GDP 직접 계산 — 실시간
+    3차: currentmarketvaluation.com 폴백 — ⚠️ 월말 기준 과거 데이터
     """
     import re, time
 
@@ -233,8 +234,28 @@ def get_buffett_indicator():
         if attempt < 5:
             time.sleep(2)  # 2초 대기 후 재시도
 
-    # ── 2차: currentmarketvaluation.com (⚠️ 월말 기준 과거 데이터) ──
-    print("  🔄 구루포커스 5회 실패 → CMV 폴백 (⚠️ 과거 데이터 주의)")
+    # ── 2차: yfinance Wilshire 5000 / GDP 직접 계산 ──
+    print("  🔄 구루포커스 5회 실패 → yfinance 직접 계산 시도")
+    try:
+        import yfinance as yf
+        w5 = yf.Ticker("^W5000")
+        hist = w5.history(period="5d")
+        if not hist.empty:
+            w5_close = hist["Close"].iloc[-1]
+            # Wilshire 5000 Full Cap Index: 지수값 ≈ 시가총액(십억 달러)
+            # 미국 GDP (BEA 추정, 분기별 업데이트):
+            # - 2025 연간: ~$30.3T → 2026 Q1 추정: ~$31.5T
+            # - 이 값은 분기마다 수동 업데이트 필요
+            US_GDP_TRILLION = 31.5  # 2026 Q1 추정 (BEA)
+            total_mkt_cap_T = w5_close / 1000  # 지수값 → 조 달러 환산
+            ratio = round((total_mkt_cap_T / US_GDP_TRILLION) * 100, 1)
+            print(f"  ✅ 버핏지표 직접 계산 성공 (yfinance): W5000={w5_close:.0f}, GDP=${US_GDP_TRILLION}T → {ratio}%")
+            return {"ratio": ratio, "source": "yfinance(계산)", "stale": False}
+    except Exception as e:
+        print(f"  ⚠️ yfinance 버핏지표 계산 에러: {e}")
+
+    # ── 3차: currentmarketvaluation.com (⚠️ 월말 기준 과거 데이터) ──
+    print("  🔄 yfinance 계산 실패 → CMV 폴백 (⚠️ 과거 데이터 주의)")
     try:
         r = requests.get(
             "https://currentmarketvaluation.com/models/buffett-indicator.php",

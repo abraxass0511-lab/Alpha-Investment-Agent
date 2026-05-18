@@ -282,19 +282,24 @@ export default {
             const filled = symbols.filter(s => heldSymbols.includes(s));
             const notFilled = symbols.filter(s => !heldSymbols.includes(s));
 
-            let staleMsg = "📊 *[체결 확인 완료]*\n━━━━━━━━━━━━━━━\n\n";
-            staleMsg += `📅 주문일: ${orderDateKst}\n\n`;
+            // 현재 보유 종목 수 계산 (슬롯 표시용)
+            const MAX_PORTFOLIO = 5;
+            const heldCount = heldSymbols.filter(s => s.length > 0).length;
+
+            let staleMsg = "🕐 *[이전 주문 — 지연 알림]*\n━━━━━━━━━━━━━━━\n\n";
+            staleMsg += `📅 주문일: ${orderDateKst}\n`;
+            staleMsg += `⚠️ 당일 실시간 알림이 지연되어, 잔고 기반으로 뒤늦게 확인한 내역입니다.\n\n`;
             if (filled.length > 0) {
               staleMsg += `✅ 체결 확인: ${filled.join(", ")}\n`;
               staleMsg += "_잔고에서 보유 확인됨_\n\n";
             }
             if (notFilled.length > 0) {
-              staleMsg += `❌ 미체결: ${notFilled.join(", ")}\n`;
+              staleMsg += `❌ 미체결: ${notFilled.join(", ")}\n\n`;
             }
             if (filled.length === 0 && notFilled.length === 0) {
-              staleMsg += "⚠️ 추적 종목 정보 없음\n";
+              staleMsg += "⚠️ 추적 종목 정보 없음\n\n";
             }
-            staleMsg += "\n_실시간 알림이 지연되어 잔고 기반으로 확인했습니다._";
+            staleMsg += `📊 현재 보유: *${heldCount}/${MAX_PORTFOLIO} 슬롯*`;
             await sendMessage(env, staleMsg, REPLY_KEYBOARD);
             await env.KV.delete("pending_fill_check");
             // stale 정리 완료 → 이하 체결 폴링 스킵 (fillPend 이미 삭제됨)
@@ -1646,7 +1651,7 @@ async function handleUpdate(update, env) {
         body: JSON.stringify({ ref: "main" }),
       });
       if (r.ok || r.status === 204) {
-        await sendMessage(env, "\ud83d\udce1 *\ucc38\uace0 \uc9c0\ud45c \uc870\ud68c \uc2dc\uc791!*\n\n\uc57d 2~3\ubd84 \ud6c4 \ubc84\ud54f\uc9c0\ud45c\u00b7QQQ \ud558\ub77d\ub960\u00b7\uacf5\ud3ec\u00b7\ud0d0\uc695 \uc9c0\uc218\ub97c \uc54c\ub824\ub4dc\ub9ac\uaca0\uc2b5\ub2c8\ub2e4, \ub300\ud45c\ub2d8.", REPLY_KEYBOARD);
+        await sendMessage(env, "\ud83d\udce1 *\ucc38\uace0 \uc9c0\ud45c \uc870\ud68c \uc2dc\uc791!*\n\n\uc57d 2~3\ubd84 \ud6c4 \uad6d\ucc44\uae08\ub9ac\u00b7\ubc84\ud54f\uc9c0\ud45c\u00b7QQQ \ud558\ub77d\ub960\u00b7\uacf5\ud3ec\u00b7\ud0d0\uc695 \uc9c0\uc218\ub97c \uc54c\ub824\ub4dc\ub9ac\uaca0\uc2b5\ub2c8\ub2e4, \ub300\ud45c\ub2d8.", REPLY_KEYBOARD);
       } else {
         await sendMessage(env, "\u26a0\ufe0f *GitHub \uc11c\ubc84 \ubb38\uc81c*\n\n\uc9c0\ud45c \uc694\uccad\uc744 GitHub\uc5d0 \uc804\ub2ec\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.\nHTTP " + r.status + "\n\n\uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574\uc8fc\uc138\uc694.", REPLY_KEYBOARD);
       }

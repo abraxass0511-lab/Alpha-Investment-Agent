@@ -69,6 +69,127 @@ def _qqq_invest_stage(drawdown_pct):
         return "🟢 대기 구간", 0
 
 
+def get_treasury_yields():
+    """미 국채 10년물/30년물 금리 조회
+    1차: yfinance (^TNX, ^TYX) — 안정적 API
+    2차: Investing.com 폴백 (yfinance 실패 시)
+    """
+    result = {"us10y": None, "us30y": None}
+
+    # ── 1차: yfinance (안정적 API) ──
+    try:
+        import yfinance as yf
+        # ^TNX = 10-Year Treasury Yield
+        tnx = yf.Ticker("^TNX")
+        hist_10 = tnx.history(period="5d")
+        if not hist_10.empty:
+            result["us10y"] = round(float(hist_10["Close"].iloc[-1]), 3)
+            print(f"  ✅ 10년물 금리 (yfinance): {result['us10y']}%")
+
+        # ^TYX = 30-Year Treasury Yield
+        tyx = yf.Ticker("^TYX")
+        hist_30 = tyx.history(period="5d")
+        if not hist_30.empty:
+            result["us30y"] = round(float(hist_30["Close"].iloc[-1]), 3)
+            print(f"  ✅ 30년물 금리 (yfinance): {result['us30y']}%")
+
+        if result["us10y"] is not None and result["us30y"] is not None:
+            return result
+    except Exception as e:
+        print(f"  ⚠️ yfinance 국채금리 조회 에러: {e}")
+
+    # ── 2차: Investing.com 폴백 (yfinance 실패 시) ──
+    import re
+    print("  🔄 yfinance 일부/전체 실패 → Investing.com 폴백 시도")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://kr.investing.com/rates-bonds/",
+    }
+    urls = {
+        "us10y": "https://kr.investing.com/rates-bonds/u.s.-10-year-bond-yield",
+        "us30y": "https://kr.investing.com/rates-bonds/u.s.-30-year-bond-yield",
+    }
+    for key, url in urls.items():
+        if result[key] is not None:
+            continue  # yfinance에서 이미 조회됨
+        try:
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code == 200:
+                match = re.search(r'data-test="instrument-price-last"[^>]*>([\d.]+)', r.text)
+                if not match:
+                    match = re.search(r'last-price-value"[^>]*>([\d.]+)', r.text)
+                if not match:
+                    match = re.search(r'pid-\d+-last[^>]*>([\d.]+)', r.text)
+                if match:
+                    val = float(match.group(1))
+                    result[key] = round(val, 3)
+                    print(f"  ✅ {key} 금리 (Investing.com 폴백): {result[key]}%")
+                else:
+                    print(f"  ⚠️ {key} Investing.com 파싱 실패")
+            else:
+                print(f"  ⚠️ {key} Investing.com HTTP {r.status_code}")
+        except Exception as e:
+            print(f"  ⚠️ Investing.com {key} 폴백 에러: {e}")
+
+    if result["us10y"] is None and result["us30y"] is None:
+        print("❌ 국채금리 조회 실패 (모든 소스)")
+        return None
+    return result
+
+
+def _treasury_allocation_stage(us10y, us30y):
+    """국채금리 기반 자산배분 플레이북 4단계 판정
+    
+    규칙:
+    - 1단계: 10Y < 4.0% AND 30Y < 4.5% (둘 다 만족해야 함)
+    - 2~4단계: OR 조건 (하나만 만족해도 해당 단계)
+    - 상충 시: 위험도 높은(숫자 큰) 단계가 최종 결정
+    """
+    stage = 1  # 기본: 호황기
+
+    # 1단계 확인: 반드시 BOTH 만족
+    if us10y < 4.0 and us30y < 4.5:
+        stage = 1
+    else:
+        stage = 2  # 최소 경계기
+
+    # 2~4단계: OR 조건, 높은 단계 우선
+    if us10y >= 4.5 or us30y >= 5.0:
+        stage = max(stage, 3)
+    if us10y >= 5.0 or us30y >= 5.5:
+        stage = max(stage, 4)
+
+    stages = {
+        1: {
+            "name": "1단계 (호황기)",
+            "emoji": "🟢",
+            "allocation": "주식 80~90% / 현금 10~20%",
+            "desc": "금리 안정 → 주식 비중 최대",
+        },
+        2: {
+            "name": "2단계 (경계기)",
+            "emoji": "🟡",
+            "allocation": "주식 70% / 현금 20% / 채권 10%",
+            "desc": "금리 상승 초기 → 현금 비중 확대",
+        },
+        3: {
+            "name": "3단계 (긴축기)",
+            "emoji": "🟠",
+            "allocation": "주식 50% / 현금 30% / 채권 20%",
+            "desc": "금리 고공 → 방어 태세 전환",
+        },
+        4: {
+            "name": "4단계 (위기 경계)",
+            "emoji": "🔴",
+            "allocation": "주식 30% / 현금 50% / 채권 20%",
+            "desc": "극단적 금리 → 최대 방어",
+        },
+    }
+    return stages[stage], stage
+
+
 def get_buffett_indicator():
     """버핏지표(Buffett Indicator) 조회: 미국 시가총액/GDP 비율
     1차: 구루포커스, 2차: currentmarketvaluation.com
@@ -866,22 +987,49 @@ def report_daily_picks():
         pass
 
 def report_reference_indicators():
-    """참고 지표 별도 발송 (버핏지표 + QQQ 하락률 + 공포·탐욕 지수)"""
+    """통합 매크로 지표 브리핑 발송 (국채금리 + 버핏지표 + QQQ 하락률 + 공포·탐욕 지수)"""
     from datetime import datetime
     now_str = datetime.now().strftime("%Y.%m.%d")
 
     print("\n" + "=" * 50)
-    print(f"📡 참고 지표 조회 시작 ({now_str})")
+    print(f"📡 통합 매크로 지표 조회 시작 ({now_str})")
     print("=" * 50)
 
+    treasury = get_treasury_yields()
     bi = get_buffett_indicator()
     qqq = get_qqq_drawdown()
     fg = get_fear_greed_index()
 
-    msg = f"📡 *참고 지표 현황* ({now_str})\n"
-    msg += "━━━━━━━━━\n\n"
+    msg = f"📡 *통합 매크로 지표 브리핑* ({now_str})\n"
+    msg += "━━━━━━━━━━━━━━━━━━\n\n"
 
-    # 버핏지표
+    # ── 1. 미 국채금리 (신규 추가) ──
+    if treasury and (treasury["us10y"] or treasury["us30y"]):
+        us10y = treasury["us10y"]
+        us30y = treasury["us30y"]
+
+        msg += "🏛️ *미 국채금리 현황*\n"
+        if us10y is not None:
+            msg += f"└ 10년물: *{us10y:.3f}%*\n"
+        else:
+            msg += "└ 10년물: 조회 실패\n"
+        if us30y is not None:
+            msg += f"└ 30년물: *{us30y:.3f}%*\n"
+        else:
+            msg += "└ 30년물: 조회 실패\n"
+
+        # 자산배분 플레이북 판정 (둘 다 있어야 판정 가능)
+        if us10y is not None and us30y is not None:
+            stage_info, stage_num = _treasury_allocation_stage(us10y, us30y)
+            msg += f"└ {stage_info['emoji']} *{stage_info['name']}*\n"
+            msg += f"└ 권장 비중: {stage_info['allocation']}\n"
+            msg += f"└ _{stage_info['desc']}_\n"
+        msg += "└ 1단계: 10Y<4.0 AND 30Y<4.5 | 2단계: 10Y<4.5 OR 30Y<5.0\n"
+        msg += "└ 3단계: 10Y<5.0 OR 30Y<5.5 | 4단계: 10Y≥5.0 OR 30Y≥5.5\n\n"
+    else:
+        msg += "⚠️ 미 국채금리 조회 실패\n\n"
+
+    # ── 2. 버핏지표 ──
     if bi:
         strategy, bi_emoji = _buffett_strategy(bi['ratio'])
         msg += (
@@ -892,7 +1040,7 @@ def report_reference_indicators():
     else:
         msg += "⚠️ 버핏지표 조회 실패\n\n"
 
-    # QQQ 고점 대비 하락률
+    # ── 3. QQQ 고점 대비 하락률 ──
     if qqq:
         stage_text, stage_num = _qqq_invest_stage(qqq['drawdown_pct'])
         msg += (
@@ -906,7 +1054,7 @@ def report_reference_indicators():
     else:
         msg += "⚠️ QQQ 하락률 조회 실패\n\n"
 
-    # 공포·탐욕 지수
+    # ── 4. 공포·탐욕 지수 ──
     if fg:
         msg += (
             f"{fg['emoji']} *공포·탐욕 지수: {fg['score']}* ({fg['label']})\n"
@@ -915,10 +1063,63 @@ def report_reference_indicators():
     else:
         msg += "⚠️ 공포·탐욕 지수 조회 실패\n\n"
 
-    msg += "_투자 참고용 지표이며, 실제 매매 판단은 대표님의 결정에 달려있습니다._"
+    # ── 5. 종합 판단 ──
+    msg += "━━━━━━━━━━━━━━━━━━\n"
+    msg += "📋 *종합 판단*\n"
+    danger_signals = []
+    safe_signals = []
+
+    if treasury and treasury["us10y"] is not None and treasury["us30y"] is not None:
+        _, t_stage = _treasury_allocation_stage(treasury["us10y"], treasury["us30y"])
+        if t_stage >= 3:
+            danger_signals.append(f"국채금리 {t_stage}단계")
+        elif t_stage == 2:
+            danger_signals.append("국채금리 경계")
+        else:
+            safe_signals.append("국채금리 안정")
+
+    if bi:
+        if bi['ratio'] > 170:
+            danger_signals.append(f"버핏지표 과열({bi['ratio']:.0f}%)")
+        elif bi['ratio'] >= 140:
+            danger_signals.append(f"버핏지표 경계({bi['ratio']:.0f}%)")
+        else:
+            safe_signals.append("버핏지표 정상")
+
+    if fg:
+        if fg['score'] <= 25:
+            danger_signals.append(f"극도의 공포({fg['score']})")
+        elif fg['score'] <= 44:
+            danger_signals.append(f"공포({fg['score']})")
+        elif fg['score'] >= 75:
+            danger_signals.append(f"극도의 탐욕({fg['score']})")
+        else:
+            safe_signals.append(f"심리 안정({fg['score']})")
+
+    if qqq:
+        if qqq['drawdown_pct'] <= -20:
+            danger_signals.append(f"QQQ 급락({qqq['drawdown_pct']:+.1f}%)")
+        else:
+            safe_signals.append(f"QQQ 정상({qqq['drawdown_pct']:+.1f}%)")
+
+    if danger_signals:
+        msg += f"⚠️ 주의: {' / '.join(danger_signals)}\n"
+    if safe_signals:
+        msg += f"✅ 안정: {' / '.join(safe_signals)}\n"
+
+    if len(danger_signals) >= 3:
+        msg += "🔴 *→ 방어 모드 권고: 현금 비중 확대 필요*\n"
+    elif len(danger_signals) >= 2:
+        msg += "🟠 *→ 경계 모드: 신규 매수 신중하게*\n"
+    elif len(danger_signals) == 1:
+        msg += "🟡 *→ 관찰 모드: 일부 지표 주의 필요*\n"
+    else:
+        msg += "🟢 *→ 정상 모드: 적극적 투자 가능*\n"
+
+    msg += "\n_투자 참고용 지표이며, 실제 매매 판단은 대표님의 결정에 달려있습니다._"
 
     send_telegram_message(msg)
-    print(f"✅ 참고 지표 발송 완료!")
+    print(f"✅ 통합 매크로 지표 브리핑 발송 완료!")
 
 
 if __name__ == "__main__":

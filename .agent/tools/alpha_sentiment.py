@@ -148,27 +148,44 @@ def run_momentum_selector():
     print(f"   🎯 양수 모멘텀 상위 5개 선정")
 
     # ── 전체 종목에 대해 12-1 모멘텀 계산 ──
+    # ★ 3단계 스캐너에서 이미 계산된 Momentum_12_1 값을 우선 재사용
+    #    → 불필요한 API 재호출 제거, 실패로 인한 데이터 손실 방지
     step5_api_fail = 0
+    step5_reused = 0
     results = []
 
     for idx, row in df.iterrows():
         symbol = row.get("Symbol", "?")
         name = row.get("Name", symbol)
         
-        mom = calculate_12_1_momentum(symbol)
-        
-        if mom is None:
-            step5_api_fail += 1
-            mom = 0.0
-            reason = f"⚠️ 12-1 모멘텀: API 실패"
-            print(f"    ⚠️ {symbol} 모멘텀 API 실패 → 0 처리")
-        else:
+        # ★ 3단계에서 이미 계산된 모멘텀 값이 있으면 재사용 (API 호출 불필요)
+        existing_mom = row.get("Momentum_12_1", None)
+        if existing_mom is not None and existing_mom != 0:
+            mom = existing_mom
+            step5_reused += 1
             mom_pct = round(mom * 100, 2)
             reason = f"12-1 모멘텀: {mom_pct}%"
             if mom > 0:
-                print(f"    ✅ {symbol} 모멘텀 {mom_pct}% (양수)")
+                print(f"    ✅ {symbol} 모멘텀 {mom_pct}% (3단계 캐시 재사용)")
             else:
                 print(f"    ❌ {symbol} 모멘텀 {mom_pct}% (음수/제로 → 탈락)")
+        else:
+            # 기존 값이 없을 때만 API 폴백
+            mom = calculate_12_1_momentum(symbol)
+            
+            if mom is None:
+                step5_api_fail += 1
+                mom = 0.0
+                reason = f"⚠️ 12-1 모멘텀: API 실패"
+                print(f"    ⚠️ {symbol} 모멘텀 API 실패 → 0 처리")
+            else:
+                mom_pct = round(mom * 100, 2)
+                reason = f"12-1 모멘텀: {mom_pct}%"
+                if mom > 0:
+                    print(f"    ✅ {symbol} 모멘텀 {mom_pct}% (API 폴백)")
+                else:
+                    print(f"    ❌ {symbol} 모멘텀 {mom_pct}% (음수/제로 → 탈락)")
+            time.sleep(0.3)  # API 호출 시에만 대기
 
         results.append({
             "Symbol": symbol,
@@ -184,9 +201,6 @@ def run_momentum_selector():
             "Status": "PASS" if mom > 0 else "FAIL",
             "Reason": reason,
         })
-
-        # Finnhub Rate Limit 방지: 종목간 0.3초 대기
-        time.sleep(0.3)
 
     # ── 양수 모멘텀만 필터 → 상위 5개 ──
     positive = [r for r in results if r["Momentum_12_1"] > 0]
@@ -228,9 +242,10 @@ def run_momentum_selector():
 
     print(f"\n📊 결과 요약:")
     print(f"   4단계 통과: {len(df)}종목")
+    print(f"   3단계 캐시 재사용: {step5_reused}종목 (API 호출 불필요)")
     print(f"   양수 모멘텀: {len(positive)}종목")
     print(f"   음수/제로: {len(negative)}종목")
-    print(f"   API 실패: {step5_api_fail}종목")
+    print(f"   API 폴백 실패: {step5_api_fail}종목")
     print(f"   ★ 최종 선정: {len(final_picks)}종목")
 
 

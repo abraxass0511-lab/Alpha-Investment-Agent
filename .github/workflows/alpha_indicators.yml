@@ -18,6 +18,7 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      FRED_KEY: ${{ secrets.FRED_KEY }}
 
     steps:
     - name: Checkout code

@@ -47,6 +47,7 @@ jobs:
       MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
       WORKER_URL: ${{ secrets.WORKER_URL }}
       WORKER_API_KEY: ${{ secrets.WORKER_API_KEY }}
+      FRED_KEY: ${{ secrets.FRED_KEY }}
 
     steps:
     - name: Checkout code

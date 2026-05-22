@@ -73,7 +73,8 @@ def _qqq_invest_stage(drawdown_pct):
 def get_treasury_yields():
     """미 국채 10년물/30년물 금리 조회
     1차: yfinance (^TNX, ^TYX) — 안정적 API
-    2차: Investing.com 폴백 (yfinance 실패 시)
+    2차: FRED API (DGS10, DGS30) — 미 연준 공식 데이터
+    3차: Investing.com 폴백 (최후 수단)
     """
     result = {"us10y": None, "us30y": None, "source": ""}
 
@@ -100,9 +101,38 @@ def get_treasury_yields():
     except Exception as e:
         print(f"  ⚠️ yfinance 국채금리 조회 에러: {e}")
 
-    # ── 2차: Investing.com 폴백 (yfinance 실패 시) ──
+    # ── 2차: FRED API (미 연준 공식 데이터, IP 차단 없음) ──
+    fred_key = os.getenv("FRED_KEY")
+    if fred_key and (result["us10y"] is None or result["us30y"] is None):
+        print("  🔄 yfinance 일부/전체 실패 → FRED API 폴백 시도")
+        fred_series = {"us10y": "DGS10", "us30y": "DGS30"}
+        for key, series_id in fred_series.items():
+            if result[key] is not None:
+                continue  # yfinance에서 이미 조회됨
+            try:
+                url = f"https://api.stlouisfed.org/fred/series/observations?series_id={series_id}&api_key={fred_key}&file_type=json&sort_order=desc&limit=5"
+                r = requests.get(url, timeout=15)
+                if r.status_code == 200:
+                    observations = r.json().get("observations", [])
+                    # 최신 유효값 찾기 (FRED는 휴일에 "." 반환)
+                    for obs in observations:
+                        val = obs.get("value", ".")
+                        if val != ".":
+                            result[key] = round(float(val), 3)
+                            print(f"  ✅ {key} 금리 (FRED {series_id}): {result[key]}%")
+                            break
+                else:
+                    print(f"  ⚠️ FRED {series_id} HTTP {r.status_code}")
+            except Exception as e:
+                print(f"  ⚠️ FRED {series_id} 에러: {e}")
+
+        if result["us10y"] is not None and result["us30y"] is not None:
+            result["source"] = "FRED" if result["source"] == "" else "yfinance+FRED"
+            return result
+
+    # ── 3차: Investing.com 폴백 (최후 수단) ──
     import re
-    print("  🔄 yfinance 일부/전체 실패 → Investing.com 폴백 시도")
+    print("  🔄 FRED 일부/전체 실패 → Investing.com 폴백 시도")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -115,7 +145,7 @@ def get_treasury_yields():
     }
     for key, url in urls.items():
         if result[key] is not None:
-            continue  # yfinance에서 이미 조회됨
+            continue  # 이미 조회됨
         try:
             r = requests.get(url, headers=headers, timeout=15)
             if r.status_code == 200:
@@ -138,7 +168,7 @@ def get_treasury_yields():
     if result["us10y"] is None and result["us30y"] is None:
         print("❌ 국채금리 조회 실패 (모든 소스)")
         return None
-    result["source"] = "yfinance+Investing.com" if result["source"] == "" else result["source"]
+    result["source"] = result["source"] or "Investing.com"
     return result
 
 

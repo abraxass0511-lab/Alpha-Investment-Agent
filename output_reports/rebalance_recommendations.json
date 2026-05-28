@@ -1,10 +1,31 @@
 {
-  "timestamp": "2026-05-27 22:28",
-  "sell": [],
-  "buy": [],
+  "timestamp": "2026-05-28 21:22",
+  "sell": [
+    {
+      "symbol": "LITE",
+      "qty": 4,
+      "buy_avg": 925.37,
+      "current": 860.62,
+      "pnl_rate": -7.0,
+      "pnl_amt": -259.0,
+      "reasons": [
+        "3단계(에너지) 탈락: 종가 $860.62 < 50MA $862.41"
+      ],
+      "action": "SELL"
+    }
+  ],
+  "buy": [
+    {
+      "symbol": "SNDK",
+      "name": "Sandisk",
+      "price": "1641.64",
+      "reason": "12-1 모멘텀: 2496.76% | Top 5 선정",
+      "action": "BUY"
+    }
+  ],
   "held_count": 5,
-  "remaining_held": 5,
-  "available_slots": 0,
+  "remaining_held": 4,
+  "available_slots": 1,
   "scan_passed": 105,
   "picks_passed": 5
 }

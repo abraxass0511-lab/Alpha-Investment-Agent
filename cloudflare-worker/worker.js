@@ -62,7 +62,7 @@ export default {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
               appkey: env.KIS_APP_KEY, appsecret: env.KIS_SECRET_KEY,
-              "tr_id": "VTTS3012R",
+              "tr_id": getTrId(env, "BALANCE"),
             },
           });
           results.balance_raw = await balR.json();
@@ -77,7 +77,7 @@ export default {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
               appkey: env.KIS_APP_KEY, appsecret: env.KIS_SECRET_KEY,
-              "tr_id": "VTTS3007R",
+              "tr_id": getTrId(env, "BUYING_POWER"),
             },
           });
           results.buying_power_raw = await bpR.json();
@@ -99,7 +99,7 @@ export default {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
               appkey: env.KIS_APP_KEY, appsecret: env.KIS_SECRET_KEY,
-              "tr_id": "VTTS3035R",
+              "tr_id": getTrId(env, "FILLS"),
             },
           });
           results.fills_raw = await fillR.json();
@@ -526,6 +526,20 @@ export default {
   }
 };
 
+// === KIS 모의/실전 자동 분기 ===
+// KIS_BASE_URL에 "vts" 포함 → 모의투자, 미포함 → 실전투자
+function getTrId(env, type) {
+  const isLive = !env.KIS_BASE_URL?.includes("vts");
+  const map = {
+    BALANCE: isLive ? "TTTS3012R" : "VTTS3012R",
+    BUYING_POWER: isLive ? "TTTS3007R" : "VTTS3007R",
+    FILLS: isLive ? "TTTS3035R" : "VTTS3035R",
+    BUY: isLive ? "JTTT1002U" : "VTTT1002U",
+    SELL: isLive ? "JTTT1006U" : "VTTT1006U",
+  };
+  return map[type] || type;
+}
+
 // === Telegram API ===
 async function sendMessage(env, text, replyMarkup) {
   const url = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
@@ -666,7 +680,7 @@ async function getBalance(env, _retry = false) {
           Authorization: `Bearer ${token}`,
           appkey: env.KIS_APP_KEY,
           appsecret: env.KIS_SECRET_KEY,
-          "tr_id": "VTTS3012R",
+          "tr_id": getTrId(env, "BALANCE"),
         },
       });
 
@@ -723,7 +737,7 @@ async function getBuyingPower(env, _retry = false) {
       Authorization: `Bearer ${token}`,
       appkey: env.KIS_APP_KEY,
       appsecret: env.KIS_SECRET_KEY,
-      "tr_id": "VTTS3007R",
+      "tr_id": getTrId(env, "BUYING_POWER"),
     },
   });
 
@@ -832,7 +846,7 @@ async function sleep(ms) {
 }
 
 async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, maxRetries = 3) {
-  const side = trId === "VTTT1002U" ? "매수" : "매도";
+  const side = trId.includes("1002") ? "매수" : "매도";
   
   // ═══ 모의투자 지정가 전략 ═══
   // 모의투자는 지정가(ORD_DVSN "00")만 지원 — 시장가("01") 사용 불가
@@ -955,12 +969,12 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
 
 async function sellOrder(env, symbol, qty, price, exchange = null) {
   if (!exchange) exchange = await detectExchange(env, symbol);
-  return await executeOrderWithRetry(env, "VTTT1006U", symbol, qty, price, exchange);
+  return await executeOrderWithRetry(env, getTrId(env, "SELL"), symbol, qty, price, exchange);
 }
 
 async function buyOrder(env, symbol, qty, price, exchange = null) {
   if (!exchange) exchange = await detectExchange(env, symbol);
-  return await executeOrderWithRetry(env, "VTTT1002U", symbol, qty, price, exchange);
+  return await executeOrderWithRetry(env, getTrId(env, "BUY"), symbol, qty, price, exchange);
 }
 
 // === 체결 확인 함수 (KIS 주문체결내역 조회) ===
@@ -1004,7 +1018,7 @@ async function checkOrderFills(env, orderDate) {
       Authorization: `Bearer ${token}`,
       appkey: env.KIS_APP_KEY,
       appsecret: env.KIS_SECRET_KEY,
-      "tr_id": "VTTS3035R",
+      "tr_id": getTrId(env, "FILLS"),
     },
   });
 

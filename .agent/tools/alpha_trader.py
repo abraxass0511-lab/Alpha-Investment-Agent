@@ -90,6 +90,19 @@ class AlphaTrader:
             "tr_id": tr_id
         }
 
+    def _get_tr_id(self, api_type):
+        """KIS_BASE_URL 기반 모의/실전 자동 분기. URL에 'vts' 포함 시 모의투자."""
+        is_live = "vts" not in (self.base_url or "")
+        tr_map = {
+            "DEPOSIT":      "CTRP6504R" if is_live else "VTRP6504R",
+            "BUYING_POWER":  "TTTS3007R" if is_live else "VTTS3007R",
+            "BALANCE":       "TTTS3012R" if is_live else "VTTS3012R",
+            "BUY":           "JTTT1002U" if is_live else "VTTT1002U",
+            "SELL":          "JTTT1006U" if is_live else "VTTT1006U",
+            "FILLS":         "TTTS3035R" if is_live else "VTTS3035R",
+        }
+        return tr_map.get(api_type, api_type)
+
     # ───────────────────────────────────────────────────────────
     # 2. 예수금 조회 (체결기준 현재잔고) [v1_해외주식-008]
     #    → 통화별 예수금 (USD, JPY, HKD 등) + 원화 합산
@@ -103,8 +116,8 @@ class AlphaTrader:
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
 
-        # 공식 tr_id: 모의투자 VTRP6504R / 실전 CTRP6504R
-        headers = self._make_headers("VTRP6504R")
+        # 공식 tr_id: 모의투자 VTRP6504R / 실전 CTRP6504R (자동 분기)
+        headers = self._make_headers(self._get_tr_id("DEPOSIT"))
         params = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
@@ -141,8 +154,8 @@ class AlphaTrader:
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-psamount"
 
-        # 공식 tr_id: 모의투자 VTTS3007R / 실전 TTTS3007R
-        headers = self._make_headers("VTTS3007R")
+        # 공식 tr_id: 모의투자 VTTS3007R / 실전 TTTS3007R (자동 분기)
+        headers = self._make_headers(self._get_tr_id("BUYING_POWER"))
         params = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
@@ -178,7 +191,7 @@ class AlphaTrader:
             return None
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
-        headers = self._make_headers("VTTS3012R")
+        headers = self._make_headers(self._get_tr_id("BALANCE"))
 
         all_holdings = []
         bal_summary = {}
@@ -230,8 +243,8 @@ class AlphaTrader:
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/order"
 
-        # 공식 tr_id: 모의투자 미국 매수 VTTT1002U / 실전 TTTT1002U
-        headers = self._make_headers("VTTT1002U")
+        # 공식 tr_id: 모의투자 미국 매수 VTTT1002U / 실전 JTTT1002U (자동 분기)
+        headers = self._make_headers(self._get_tr_id("BUY"))
         payload = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
@@ -270,8 +283,8 @@ class AlphaTrader:
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/order"
 
-        # 공식 tr_id: 모의투자 미국 매도 VTTT1006U / 실전 TTTT1006U
-        headers = self._make_headers("VTTT1006U")
+        # 공식 tr_id: 모의투자 미국 매도 VTTT1006U / 실전 JTTT1006U (자동 분기)
+        headers = self._make_headers(self._get_tr_id("SELL"))
         payload = {
             "CANO": self.cano,
             "ACNT_PRDT_CD": self.acnt_prdt_cd,
@@ -311,8 +324,8 @@ class AlphaTrader:
 
         url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-ccnl"
 
-        # 공식 tr_id: 모의투자 VTTS3035R / 실전 TTTS3035R
-        headers = self._make_headers("VTTS3035R")
+        # 공식 tr_id: 모의투자 VTTS3035R / 실전 TTTS3035R (자동 분기)
+        headers = self._make_headers(self._get_tr_id("FILLS"))
         today = datetime.now().strftime("%Y%m%d")
 
         params = {

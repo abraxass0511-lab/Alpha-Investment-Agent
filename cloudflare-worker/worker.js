@@ -259,12 +259,11 @@ export default {
 
   // Cron Trigger: market open + 체결 확인 폴링
   async scheduled(event, env, ctx) {
-    try {
-      const isTradingDayNow = isTradingDay(new Date());
+    const isTradingDayNow = isTradingDay(new Date());
 
-      // === A-0. Stale pending_fill_check 자동 정리 (거래일 무관) ===
-      // 날짜가 바뀌었으면 잔고 기반으로 체결 여부 확인 후 정리
-      {
+    // === A-0. Stale pending_fill_check 자동 정리 (거래일 무관) ===
+    // 날짜가 바뀌었으면 잔고 기반으로 체결 여부 확인 후 정리
+    try {
         const fillPendStale = await env.KV.get("pending_fill_check");
         if (fillPendStale) {
           const staleData = JSON.parse(fillPendStale);
@@ -305,9 +304,12 @@ export default {
             // stale 정리 완료 → 이하 체결 폴링 스킵 (fillPend 이미 삭제됨)
           }
         }
-      }
+    } catch (e) {
+      console.log("⚠️ A-0 stale fill check 정리 에러:", e.message);
+    }
 
-      // === A. 체결 확인 폴링 (거래일 + 오늘 주문건만) ===
+    // === A. 체결 확인 폴링 (거래일 + 오늘 주문건만) ===
+    try {
       if (isTradingDayNow) {
         const fillPend = await env.KV.get("pending_fill_check");
         if (fillPend) {
@@ -447,10 +449,14 @@ export default {
           }
         }
       }
+    } catch (e) {
+      console.log("⚠️ A 체결 확인 폴링 에러:", e.message);
+    }
 
-      // === B. 예약 주문 실행 (휴장일 여부와 무관하게 항상 실행) ===
-      // 예약 주문은 장이 열려 있을 때만 실행 (isMarketOpen 체크)
-      // 장이 닫혀 있으면 다음 cron에서 재시도
+    // === B. 예약 주문 실행 (휴장일 여부와 무관하게 항상 실행) ===
+    // 예약 주문은 장이 열려 있을 때만 실행 (isMarketOpen 체크)
+    // 장이 닫혀 있으면 다음 cron에서 재시도
+    try {
 
       // 1. 긴급 전량 매도 예약 실행
       const sellPend = await env.KV.get("pending_sell");

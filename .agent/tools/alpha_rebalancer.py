@@ -322,13 +322,75 @@ def run_rebalancer():
         else:
             print("✅ 모든 보유 종목 적격 — 매도 추천 없음.")
 
-    # 4. 매수 추천 (보유하지 않은 신규 선정 종목)
-    #    ★ 최대 5종목 규칙: 보유 유지 종목을 제외한 남은 슬롯만큼만 추천
+    # 4. ★ MAX_PORTFOLIO 초과 시 초과분 매도 추천
+    #    기준 충족이더라도 Top5(picks)에 없는 종목은 매도하여 5종목 유지
     MAX_PORTFOLIO = 5
-    remaining_held = len(held_stocks) - len(sell_recs)  # 매도되지 않고 유지될 종목 수
+    remaining_held = len(held_stocks) - len(sell_recs)
+
+    if remaining_held > MAX_PORTFOLIO:
+        print(f"\n⚠️ [4] 보유 {remaining_held}종목 > 최대 {MAX_PORTFOLIO}종목 — 초과분 매도 추천")
+        # 이미 매도 추천된 종목 제외
+        sell_symbols = {s["symbol"] for s in sell_recs}
+        remaining_stocks = [s for s in held_stocks if s["symbol"] not in sell_symbols]
+
+        # picks(Top5)에 없는 종목 → 우선 매도 대상
+        not_in_picks = [s for s in remaining_stocks if s["symbol"] not in picks_data]
+        in_picks = [s for s in remaining_stocks if s["symbol"] in picks_data]
+
+        # 모멘텀 데이터 로드하여 정렬 (낮은 순)
+        momentum_data = load_csv("output_reports/sentiment_all_latest.csv")
+
+        def get_momentum(stock):
+            sym = stock["symbol"]
+            if sym in momentum_data:
+                try:
+                    return float(momentum_data[sym].get("Momentum(%)", "0") or "0")
+                except (ValueError, TypeError):
+                    return 0
+            return 0
+
+        # Top5에 없는 종목을 모멘텀 낮은 순으로 정렬
+        not_in_picks.sort(key=get_momentum)
+
+        excess = remaining_held - MAX_PORTFOLIO
+        for stock in not_in_picks[:excess]:
+            sell_recs.append({
+                "symbol": stock["symbol"],
+                "qty": stock["qty"],
+                "buy_avg": stock["buy_avg"],
+                "current": stock["current"],
+                "pnl_rate": stock["pnl_rate"],
+                "pnl_amt": stock["pnl_amt"],
+                "reasons": [f"MAX_PORTFOLIO({MAX_PORTFOLIO}) 초과 — Top5 미포함 종목 정리"],
+                "action": "SELL",
+            })
+            print(f"   🔻 {stock['symbol']}: Top5 미포함 + 모멘텀 {get_momentum(stock):.1f}% → 매도 추천")
+
+        # 그래도 초과이면 (Top5 내에서도 초과) → 모멘텀 최하위 매도
+        remaining_held = len(held_stocks) - len(sell_recs)
+        if remaining_held > MAX_PORTFOLIO:
+            sell_symbols = {s["symbol"] for s in sell_recs}
+            still_remaining = [s for s in held_stocks if s["symbol"] not in sell_symbols]
+            still_remaining.sort(key=get_momentum)
+            extra_excess = remaining_held - MAX_PORTFOLIO
+            for stock in still_remaining[:extra_excess]:
+                sell_recs.append({
+                    "symbol": stock["symbol"],
+                    "qty": stock["qty"],
+                    "buy_avg": stock["buy_avg"],
+                    "current": stock["current"],
+                    "pnl_rate": stock["pnl_rate"],
+                    "pnl_amt": stock["pnl_amt"],
+                    "reasons": [f"MAX_PORTFOLIO({MAX_PORTFOLIO}) 초과 — 모멘텀 최하위 정리"],
+                    "action": "SELL",
+                })
+                print(f"   🔻 {stock['symbol']}: 모멘텀 최하위 → 매도 추천")
+
+    # 매도 후 남는 종목 수 재계산
+    remaining_held = len(held_stocks) - len(sell_recs)
     available_slots = max(0, MAX_PORTFOLIO - remaining_held)
 
-    print(f"\n🔍 [4] 신규 매수 종목 확인...")
+    print(f"\n🔍 [5] 신규 매수 종목 확인...")
     print(f"   📊 보유 유지: {remaining_held}종목 | 매수 가능 슬롯: {available_slots}개 (최대 {MAX_PORTFOLIO}종목)")
 
     held_symbols = [s["symbol"] for s in held_stocks]

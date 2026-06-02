@@ -534,8 +534,8 @@ function getTrId(env, type) {
     BALANCE: isLive ? "TTTS3012R" : "VTTS3012R",
     BUYING_POWER: isLive ? "TTTS3007R" : "VTTS3007R",
     FILLS: isLive ? "TTTS3035R" : "VTTS3035R",
-    BUY: isLive ? "JTTT1002U" : "VTTT1002U",
-    SELL: isLive ? "JTTT1006U" : "VTTT1006U",
+    BUY: isLive ? "JTTT1002U" : "VTTS1001U",
+    SELL: isLive ? "JTTT1006U" : "VTTS1002U",
   };
   return map[type] || type;
 }

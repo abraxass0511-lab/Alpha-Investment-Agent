@@ -1089,13 +1089,17 @@ async function executeApproval(env) {
     let buyMsg = "";
     let sellMsg = "";
     let successCount = 0;
+    let sellSuccessCount = 0; // ★ 매도 성공 건수 별도 추적 (슬롯 계산용)
 
-    // \ub9e4\ub3c4 \uba3c\uc800 \uc2e4\ud589 (\uc608\uc218\uae08 \ud655\ubcf4)
+    // 매도 먼저 실행 (예수금 확보)
     if (sellStocks.length > 0) {
       sellMsg += "\ud83d\udd34 *\ub9e4\ub3c4:*\n";
       for (const s of sellStocks) {
         const res = await sellOrder(env, s.symbol, s.qty, s.current);
-        if (res.success) successCount++;
+        if (res.success) {
+          successCount++;
+          sellSuccessCount++;
+        }
         sellMsg += res.success
           ? `  \u2705 ${s.symbol} ${s.qty}\uc8fc \u00d7 $${s.current.toFixed(2)} \ub9e4\ub3c4 \uc8fc\ubb38 \uc811\uc218\n`
           : `  \u274c ${s.symbol} \ub9e4\ub3c4 \uc2e4\ud328: ${res.error}\n`;
@@ -1106,18 +1110,26 @@ async function executeApproval(env) {
     // \ub9e4\uc218 \uc2e4\ud589
     if (buyStocks.length > 0) {
       const holdings = await getBalance(env);
-      const heldSymbols = (holdings || []).filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0).map(h => h.ovrs_pdno);
-      buyStocks = buyStocks.filter(s => !heldSymbols.includes(s.symbol));
 
-      // ★ MAX_PORTFOLIO=5 제한: 보유 유지 종목 + 매수 종목 합산 5개까지만
-      const MAX_PORTFOLIO = 5;
-      const currentHeld = heldSymbols.length;
-      const sellCount = sellStocks.length;
-      const remainingHeld = Math.max(0, currentHeld - sellCount);
-      const availableSlots = Math.max(0, MAX_PORTFOLIO - remainingHeld);
-      if (buyStocks.length > availableSlots) {
-        console.log(`⚠️ 매수 후보 ${buyStocks.length}개 → ${availableSlots}개로 제한 (보유유지 ${remainingHeld}종목)`);
-        buyStocks = buyStocks.slice(0, availableSlots);
+      // ★ 잔고 조회 실패 시 매수 차단 (보유 종목 확인 없이 매수하면 중복 매수 위험)
+      if (!holdings || holdings.length === 0) {
+        console.log("❌ 잔고 조회 실패 — 매수 중단 (중복 매수 방지)");
+        buyMsg += "⚠️ 잔고 조회 실패로 매수를 중단합니다.\n";
+        buyMsg += "_보유 종목 확인 없이 매수하면 중복 매수 위험이 있습니다._\n\n";
+        buyStocks = [];
+      } else {
+        const heldSymbols = holdings.filter(h => parseInt(h.ovrs_cblc_qty || "0") > 0).map(h => h.ovrs_pdno);
+        buyStocks = buyStocks.filter(s => !heldSymbols.includes(s.symbol));
+
+        // ★ MAX_PORTFOLIO=5 제한: 매도 '성공' 건수만 반영 (실패한 매도는 슬롯 미확보)
+        const MAX_PORTFOLIO = 5;
+        const currentHeld = heldSymbols.length;
+        const remainingHeld = Math.max(0, currentHeld - sellSuccessCount);
+        const availableSlots = Math.max(0, MAX_PORTFOLIO - remainingHeld);
+        if (buyStocks.length > availableSlots) {
+          console.log(`⚠️ 매수 후보 ${buyStocks.length}개 → ${availableSlots}개로 제한 (보유유지 ${remainingHeld}종목, 매도성공 ${sellSuccessCount}건)`);
+          buyStocks = buyStocks.slice(0, availableSlots);
+        }
       }
 
       if (buyStocks.length === 0) {

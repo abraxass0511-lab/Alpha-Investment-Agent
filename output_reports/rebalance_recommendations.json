@@ -1,15 +1,35 @@
 {
-  "timestamp": "2026-06-02 10:37",
+  "timestamp": "2026-06-02 21:22",
   "sell": [
-    {"symbol": "FIX", "qty": 3, "current": 1787.88, "reasons": ["Top5 미포함 — 전량 매도"]},
-    {"symbol": "JBL", "qty": 19, "current": 359.97, "reasons": ["Top5 미포함 — 전량 매도"]},
-    {"symbol": "STX", "qty": 4, "current": 921.26, "reasons": ["중복 매수분 정리 (12→8주)"]},
-    {"symbol": "WDC", "qty": 7, "current": 546.20, "reasons": ["중복 매수분 정리 (22→15주)"]}
+    {
+      "symbol": "FIX",
+      "qty": 3,
+      "buy_avg": 1504.86,
+      "current": 1883.26,
+      "pnl_rate": 25.15,
+      "pnl_amt": 1135.2,
+      "reasons": [
+        "MAX_PORTFOLIO(5) 초과 — Top5 미포함 종목 정리"
+      ],
+      "action": "SELL"
+    },
+    {
+      "symbol": "JBL",
+      "qty": 19,
+      "buy_avg": 251.613,
+      "current": 373.16,
+      "pnl_rate": 48.31,
+      "pnl_amt": 2309.39,
+      "reasons": [
+        "MAX_PORTFOLIO(5) 초과 — Top5 미포함 종목 정리"
+      ],
+      "action": "SELL"
+    }
   ],
   "buy": [],
   "held_count": 7,
   "remaining_held": 5,
   "available_slots": 0,
-  "scan_passed": 97,
+  "scan_passed": 96,
   "picks_passed": 5
 }

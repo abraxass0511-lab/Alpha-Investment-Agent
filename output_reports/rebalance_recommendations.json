@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-06-03 23:03",
+  "timestamp": "2026-06-04 21:21",
   "sell": [
     {
       "symbol": "FIX",
       "qty": 3,
       "buy_avg": 1504.86,
-      "current": 1850.04,
-      "pnl_rate": 22.94,
-      "pnl_amt": 1035.54,
+      "current": 1914.65,
+      "pnl_rate": 27.23,
+      "pnl_amt": 1229.37,
       "reasons": [
         "MAX_PORTFOLIO(5) 초과 — Top5 미포함 종목 정리"
       ],
@@ -17,9 +17,9 @@
       "symbol": "JBL",
       "qty": 19,
       "buy_avg": 251.613,
-      "current": 379.04,
-      "pnl_rate": 50.64,
-      "pnl_amt": 2421.11,
+      "current": 373.82,
+      "pnl_rate": 48.57,
+      "pnl_amt": 2321.93,
       "reasons": [
         "MAX_PORTFOLIO(5) 초과 — Top5 미포함 종목 정리"
       ],
@@ -30,6 +30,6 @@
   "held_count": 7,
   "remaining_held": 5,
   "available_slots": 0,
-  "scan_passed": 96,
+  "scan_passed": 102,
   "picks_passed": 5
 }

@@ -539,6 +539,7 @@ function getTrId(env, type) {
     FILLS: isLive ? "TTTS3035R" : "VTTS3035R",
     BUY: isLive ? "JTTT1002U" : "VTTT1002U",   // 신TR (구TR: VTTS1001U ← 사용금지!)
     SELL: isLive ? "JTTT1006U" : "VTTT1006U",   // 신TR (구TR: VTTS1002U ← 사용금지!)
+    DEPOSIT: isLive ? "CTRP6504R" : "VTRP6504R",
   };
   return map[type] || type;
 }
@@ -780,7 +781,7 @@ async function getDeposit(env, _retry = false) {
       Authorization: `Bearer ${token}`,
       appkey: env.KIS_APP_KEY,
       appsecret: env.KIS_SECRET_KEY,
-      "tr_id": "VTRP6504R",
+      "tr_id": getTrId(env, "DEPOSIT"),
     },
   });
 
@@ -914,6 +915,20 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
       }
 
       const url = `${env.KIS_BASE_URL}/uapi/overseas-stock/v1/trading/order`;
+      // ★ 매도 주문 시 SLL_TYPE 필수 (KIS API 규격: "00" = 보유수량 매도)
+      const orderBody = {
+          CANO: env.KIS_CANO,
+          ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
+          OVRS_EXCG_CD: exchange,
+          PDNO: symbol,
+          ORD_QTY: String(qty),
+          OVRS_ORD_UNPR: orderPrice,
+          ORD_SVR_DVSN_CD: "0",
+          ORD_DVSN: "00",
+      };
+      if (side === "매도") {
+        orderBody.SLL_TYPE = "00";
+      }
       const r = await fetch(url, {
         method: "POST",
         headers: {
@@ -923,16 +938,7 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
           appsecret: env.KIS_SECRET_KEY,
           "tr_id": trId,
         },
-        body: JSON.stringify({
-          CANO: env.KIS_CANO,
-          ACNT_PRDT_CD: env.KIS_ACNT_PRDT_CD,
-          OVRS_EXCG_CD: exchange,
-          PDNO: symbol,
-          ORD_QTY: String(qty),
-          OVRS_ORD_UNPR: orderPrice,
-          ORD_SVR_DVSN_CD: "0",
-          ORD_DVSN: "00",
-        }),
+        body: JSON.stringify(orderBody),
       });
 
       const data = await r.json();
@@ -948,7 +954,7 @@ async function executeOrderWithRetry(env, trId, symbol, qty, price, exchange, ma
       console.log(`❌ ${side} 실패 ${symbol}@${exchange} (시도 ${attempt}/${maxRetries}): ${errMsg}`);
 
       // 재시도 불가능한 에러 (잔고 부족, 종목 코드 오류 등)는 즉시 중단
-      const noRetryKeywords = ["잔고", "수량", "종목", "거래정지", "매매불가"];
+      const noRetryKeywords = ["잔고", "수량", "종목", "거래정지", "매매불가", "해당업무"];
       if (noRetryKeywords.some(kw => errMsg.includes(kw))) {
         return { success: false, error: errMsg };
       }

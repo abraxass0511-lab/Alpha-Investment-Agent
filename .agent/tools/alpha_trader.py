@@ -294,6 +294,7 @@ class AlphaTrader:
             "OVRS_ORD_UNPR": str(price),
             "CTAC_TLNO": "",
             "MGCO_APTM_ODNO": "",
+            "SLL_TYPE": "00",  # ★ 매도 필수: "00" = 보유수량 매도
             "ORD_SVR_DVSN_CD": "0",
             "ORD_DVSN": "00"
         }

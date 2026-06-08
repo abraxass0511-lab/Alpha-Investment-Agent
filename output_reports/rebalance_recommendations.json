@@ -1,25 +1,25 @@
 {
-  "timestamp": "2026-06-08 05:44",
+  "timestamp": "2026-06-08 21:21",
   "sell": [
-    {
-      "symbol": "LITE",
-      "qty": 4,
-      "buy_avg": 925.37,
-      "current": 863.66,
-      "pnl_rate": -6.67,
-      "pnl_amt": -246.84,
-      "reasons": [
-        "3단계(에너지) 탈락: 종가 $863.66 < 50MA $883.38"
-      ],
-      "action": "SELL"
-    },
     {
       "symbol": "FIX",
       "qty": 3,
       "buy_avg": 1504.86,
-      "current": 1843.94,
-      "pnl_rate": 22.53,
-      "pnl_amt": 1017.24,
+      "current": 1852.03,
+      "pnl_rate": 23.07,
+      "pnl_amt": 1041.51,
+      "reasons": [
+        "MAX_PORTFOLIO(5) 초과 — Top5 미포함 종목 정리"
+      ],
+      "action": "SELL"
+    },
+    {
+      "symbol": "JBL",
+      "qty": 19,
+      "buy_avg": 251.613,
+      "current": 363.95,
+      "pnl_rate": 44.65,
+      "pnl_amt": 2134.4,
       "reasons": [
         "MAX_PORTFOLIO(5) 초과 — Top5 미포함 종목 정리"
       ],
@@ -30,6 +30,6 @@
   "held_count": 7,
   "remaining_held": 5,
   "available_slots": 0,
-  "scan_passed": 97,
+  "scan_passed": 95,
   "picks_passed": 5
 }

@@ -528,14 +528,17 @@ export default {
 
 // === KIS 모의/실전 자동 분기 ===
 // KIS_BASE_URL에 "vts" 포함 → 모의투자, 미포함 → 실전투자
+// ⚠️ 주문 tr_id 수정 금지! 조회=VTTS 시리즈, 주문=VTTT 시리즈 (명명 체계가 다름)
+// ⚠️ VTTS1001U/VTTS1002U는 구TR(폐지 예정) — 절대 사용하지 말 것!
+// ⚠️ 수정 시 반드시 alpha_trader.py의 _get_tr_id()와 교차검증 필수
 function getTrId(env, type) {
   const isLive = !env.KIS_BASE_URL?.includes("vts");
   const map = {
     BALANCE: isLive ? "TTTS3012R" : "VTTS3012R",
     BUYING_POWER: isLive ? "TTTS3007R" : "VTTS3007R",
     FILLS: isLive ? "TTTS3035R" : "VTTS3035R",
-    BUY: isLive ? "JTTT1002U" : "VTTS1001U",
-    SELL: isLive ? "JTTT1006U" : "VTTS1002U",
+    BUY: isLive ? "JTTT1002U" : "VTTT1002U",   // 신TR (구TR: VTTS1001U ← 사용금지!)
+    SELL: isLive ? "JTTT1006U" : "VTTT1006U",   // 신TR (구TR: VTTS1002U ← 사용금지!)
   };
   return map[type] || type;
 }

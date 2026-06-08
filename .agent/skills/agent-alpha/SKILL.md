@@ -92,6 +92,25 @@ description: AI Quality Momentum Investment Agent - Full Automation & Self-Refle
 2. `pending_fill_check`가 stale 상태로 KV에 남아있는 것을 모름 → debug에 KV 출력이 없었음
 3. 수정 후 `/debug`로 검증하지 않음 → "다음 장에서 확인"으로 넘김
 
+### 🔴 절대 규칙 4: tr_id 매핑을 절대 추정하지 않는다
+
+> **⚠️ 2026-06-02 사고 교훈:** 에이전트가 조회 API(`VTTS3012R` 등)의 패턴을 보고 "주문 API도 `VTTS`여야 한다"고 추정하여, 올바른 신TR(`VTTT1002U`)을 구TR(`VTTS1001U`)로 되돌렸음. 이로 인해 매수/매도가 일주일간 전면 실패.
+
+**KIS API tr_id 정답표 (수정 금지!):**
+
+| 용도 | 모의투자 (vts) | 실전투자 |
+|---|---|---|
+| **매수 (BUY)** | **`VTTT1002U`** | `JTTT1002U` |
+| **매도 (SELL)** | **`VTTT1006U`** | `JTTT1006U` |
+| 잔고조회 (BALANCE) | `VTTS3012R` | `TTTS3012R` |
+| 매수가능 (BUYING_POWER) | `VTTS3007R` | `TTTS3007R` |
+| 체결조회 (FILLS) | `VTTS3035R` | `TTTS3035R` |
+| 예수금조회 (DEPOSIT) | `VTRP6504R` | `CTRP6504R` |
+
+*   **주문 API는 `VTTT` 시리즈 (신TR), 조회 API는 `VTTS` 시리즈** — 명명 체계가 다름!
+*   `VTTS1001U`/`VTTS1002U`는 **구TR(폐지 예정)** — 절대 사용 금지
+*   worker.js 수정 시 반드시 `alpha_trader.py`의 `_get_tr_id()`와 **교차검증** 필수
+
 ---
 
 ## 🗣️ 말투 절대 규칙 (Persona — 매 세션 필독)

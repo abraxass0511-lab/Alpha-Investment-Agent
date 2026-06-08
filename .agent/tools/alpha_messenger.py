@@ -589,56 +589,112 @@ def _get_held_symbols(prefetched_holdings=None):
 def get_portfolio_section():
     """보유종목 현황과 예수금을 Cloudflare Worker 경유로 조회합니다.
     
+    4단계 독립 에러 처리:
+      Phase 1: Worker 호출 (최대 2회 재시도)
+      Phase 2: KIS 직접 폴백 (Worker 실패 시 독립 실행)
+      Phase 3: 예수금 폴백 (독립 실행)
+      Phase 4: 텍스트 생성 (항상 성공)
+    
     Returns:
         tuple: (section_text, holdings_list)
             - section_text: 텔레그램용 포트폴리오 현황 텍스트
             - holdings_list: 보유종목 raw 리스트 (held_symbols 판단용 공유 데이터)
     """
-    try:
-        worker_url = os.getenv("WORKER_URL", "")
-        worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
+    holdings = []
+    usd_amt = "0"
+    error_notes = []  # 에러 추적 (디버깅용)
 
-        if not worker_url:
-            return "\n⚠️ Worker URL 미설정\n", []
+    # ── Phase 1: Cloudflare Worker 경유 조회 (최대 2회 시도) ──
+    worker_url = os.getenv("WORKER_URL", "")
+    worker_key = os.getenv("WORKER_API_KEY", "alpha-internal")
 
-        r = requests.get(
-            f"{worker_url}/api/portfolio",
-            headers={"Authorization": f"Bearer {worker_key}"},
-            timeout=15,
-        )
-        if r.status_code != 200:
-            return f"\n⚠️ 포트폴리오 조회 실패 (HTTP {r.status_code})\n", []
+    if worker_url:
+        for attempt in range(1, 3):
+            try:
+                timeout = 15 if attempt == 1 else 25  # 재시도 시 타임아웃 확장
+                r = requests.get(
+                    f"{worker_url}/api/portfolio",
+                    headers={"Authorization": f"Bearer {worker_key}"},
+                    timeout=timeout,
+                )
+                if r.status_code != 200:
+                    error_notes.append(f"Worker HTTP {r.status_code}")
+                    print(f"⚠️ Worker 포트폴리오 조회 HTTP {r.status_code} (시도 {attempt}/2)")
+                    if attempt < 2:
+                        time.sleep(2)
+                    continue
 
-        data = r.json()
-        holdings = data.get("holdings", [])
-        usd_amt = data.get("buying_power", "0")
-        api_error = data.get("api_error", False)
-        error_detail = data.get("error_detail", "")
+                data = r.json()
+                w_holdings = data.get("holdings", [])
+                usd_amt = data.get("buying_power", "0")
+                api_error = data.get("api_error", False)
+                error_detail = data.get("error_detail", "")
 
-        # ★ 디버그 로깅 (원인 추적용)
-        print(f"📊 Worker 응답: holdings={len(holdings)}건, buying_power=${usd_amt}, api_error={api_error}")
-        if error_detail:
-            print(f"   상세: {error_detail}")
+                print(f"📊 Worker 응답 (시도 {attempt}): holdings={len(w_holdings)}건, buying_power=${usd_amt}, api_error={api_error}")
+                if error_detail:
+                    print(f"   상세: {error_detail}")
 
-        # ★ Worker API 실패 시 KIS 직접 폴백
-        # 조건: api_error 플래그 OR (보유종목 비어있고 예수금은 있음)
-        if api_error or (not holdings and float(usd_amt or "0") > 0):
-            print(f"⚠️ Worker 잔고 조회 이상 (api_error={api_error}, holdings={len(holdings)}), KIS 직접 폴백 시도...")
+                if not api_error and w_holdings:
+                    holdings = w_holdings
+                    break  # ✅ Worker 조회 성공
+                elif api_error:
+                    error_notes.append(f"Worker API 에러: {error_detail}")
+                    print(f"⚠️ Worker api_error=True (시도 {attempt}/2)")
+                    if attempt < 2:
+                        time.sleep(2)
+                    continue
+                else:
+                    # holdings 비어있지만 api_error 아님 → 실제 보유 없거나 KIS 폴백 필요
+                    if float(usd_amt or "0") > 0:
+                        # Worker는 동작했는데 holdings만 비어있음 → Phase 2에서 KIS 폴백
+                        error_notes.append("Worker 정상 응답이나 보유종목 비어있음")
+                    break
+
+            except requests.exceptions.Timeout:
+                error_notes.append(f"Worker 타임아웃 (시도 {attempt})")
+                print(f"⚠️ Worker 타임아웃 (시도 {attempt}/2, timeout={timeout}s)")
+                if attempt < 2:
+                    time.sleep(2)
+            except requests.exceptions.ConnectionError as e:
+                error_notes.append(f"Worker 연결 실패 (시도 {attempt})")
+                print(f"⚠️ Worker 연결 에러 (시도 {attempt}/2): {e}")
+                if attempt < 2:
+                    time.sleep(2)
+            except Exception as e:
+                error_notes.append(f"Worker 에러: {e}")
+                print(f"⚠️ Worker 조회 에러 (시도 {attempt}/2): {e}")
+                if attempt < 2:
+                    time.sleep(2)
+    else:
+        error_notes.append("WORKER_URL 미설정")
+        print("⚠️ WORKER_URL 환경변수 미설정 → KIS 직접 폴백으로 전환")
+
+    # ── Phase 2: KIS 직접 폴백 (Worker 실패/빈 응답 시 독립 실행) ──
+    if not holdings:
+        print("🔄 Worker에서 보유종목 미확보 → KIS 직접 조회 폴백 시도...")
+        try:
             fallback = _get_holdings_fallback_kis()
             if fallback:
                 holdings = fallback
-                print(f"✅ KIS 폴백 성공: {len(holdings)}종목 복구")
+                print(f"✅ KIS 직접 폴백 성공: {len(holdings)}종목 복구")
             else:
-                print(f"❌ KIS 폴백도 실패 → 보유종목 없음으로 표시됩니다")
+                print("📭 KIS 직접 폴백: 보유종목 없음 (빈 배열)")
+        except Exception as e:
+            error_notes.append(f"KIS 폴백 에러: {e}")
+            print(f"⚠️ KIS 직접 폴백 에러: {e}")
 
-        # 예수금 $0 폴백: KIS 직접 조회 (GitHub Actions에서 실행 시)
+    # ── Phase 3: 예수금 폴백 (독립 실행) ──
+    try:
         if float(usd_amt or "0") <= 0:
             usd_amt = _get_deposit_fallback()
-
         # 유효한 예수금이면 캐시 저장
         if float(usd_amt or "0") > 0:
             _save_deposit_cache(usd_amt)
+    except Exception as e:
+        print(f"⚠️ 예수금 폴백 에러: {e}")
 
+    # ── Phase 4: 텍스트 생성 (항상 성공 — 절대 실패하지 않음) ──
+    try:
         section = "\n━━━━━━━━━━━━━━━━━━\n"
         section += "*💼 포트폴리오 현황*\n"
         section += "━━━━━━━━━━━━━━━━━━\n"
@@ -691,11 +747,23 @@ def get_portfolio_section():
         else:
             section += "📭 보유 종목 없음 (현금 100%)\n"
 
+        # 에러가 있었지만 폴백으로 복구된 경우 → 참고 표시
+        if error_notes and holdings:
+            section += f"\n_ℹ️ 조회 경로: KIS 직접 폴백 사용_\n"
+
         return section, holdings
 
     except Exception as e:
-        print(f"⚠️ 포트폴리오 조회 에러: {e}")
-        return "\n⚠️ 포트폴리오 정보 조회 실패\n", []
+        # Phase 4 텍스트 생성마저 실패 → 최소 정보라도 반환 (절대 빈 실패 메시지 불가)
+        print(f"⚠️ 포트폴리오 텍스트 생성 에러: {e}")
+        minimal = "\n━━━━━━━━━━━━━━━━━━\n"
+        minimal += "*💼 포트폴리오 현황*\n"
+        minimal += "━━━━━━━━━━━━━━━━━━\n"
+        minimal += f"💰 예수금(USD): *${usd_amt}*\n"
+        minimal += f"📋 보유종목: {len(holdings)}건\n"
+        if error_notes:
+            minimal += f"⚠️ _{error_notes[0]}_\n"
+        return minimal, holdings
 
 
 def report_daily_picks():

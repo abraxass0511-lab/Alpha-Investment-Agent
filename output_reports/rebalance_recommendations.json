@@ -1,27 +1,27 @@
 {
-  "timestamp": "2026-06-09 22:21",
+  "timestamp": "2026-06-10 21:23",
   "sell": [
-    {
-      "symbol": "LITE",
-      "qty": 6,
-      "buy_avg": 902.463,
-      "current": 821.76,
-      "pnl_rate": -8.94,
-      "pnl_amt": -484.22,
-      "reasons": [
-        "3단계(에너지) 탈락: 종가 $821.76 < 50MA $889.89"
-      ],
-      "action": "SELL"
-    },
     {
       "symbol": "FIX",
       "qty": 3,
       "buy_avg": 1504.86,
-      "current": 1831.56,
-      "pnl_rate": 21.71,
-      "pnl_amt": 980.1,
+      "current": 1719.48,
+      "pnl_rate": 14.26,
+      "pnl_amt": 643.86,
       "reasons": [
-        "MAX_PORTFOLIO(5) 초과 — Top5 미포함 종목 정리"
+        "3단계(에너지) 탈락: 종가 $1719.48 < 50MA $1772.83"
+      ],
+      "action": "SELL"
+    },
+    {
+      "symbol": "LITE",
+      "qty": 6,
+      "buy_avg": 902.463,
+      "current": 853.26,
+      "pnl_rate": -5.45,
+      "pnl_amt": -295.22,
+      "reasons": [
+        "3단계(에너지) 탈락: 종가 $853.26 < 50MA $893.86"
       ],
       "action": "SELL"
     }
@@ -30,6 +30,6 @@
   "held_count": 7,
   "remaining_held": 5,
   "available_slots": 0,
-  "scan_passed": 97,
+  "scan_passed": 84,
   "picks_passed": 5
 }
